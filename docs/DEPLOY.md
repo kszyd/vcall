@@ -73,7 +73,24 @@ VCALL_TURN_USER=vcall
 VCALL_TURN_PASS=yourpass
 ```
 
-## 7. HTTPS 反向代理（可选）
+## 7. HTTPS（浏览器摄像头必需）
+
+浏览器只在 HTTPS 或 localhost 下允许访问摄像头/麦克风。除反向代理外，服务端已内置可选 HTTPS：
+
+```bash
+./scripts/gen-cert.sh 192.168.199.100
+```
+
+在 `deploy/docker-compose.yaml` 中填写：
+
+```yaml
+      VCALL_TLS_CERT: "/certs/server.crt"
+      VCALL_TLS_KEY: "/certs/server.key"
+```
+
+重启后访问 `https://192.168.199.100:9443/call`，首次需在浏览器信任自签证书。若不加证书，网页端仍可用「仅接收加入」观看对方画面。
+
+### 反向代理方式（可选）
 
 若需通过域名访问，可使用 Nginx：
 

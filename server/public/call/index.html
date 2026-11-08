@@ -40,7 +40,9 @@
       </label>
 
       <button id="joinBtn" class="btn primary block" type="button">加入房间</button>
+      <button id="receiveOnlyBtn" class="btn secondary block hidden" type="button">仅接收加入（不启用本机摄像头）</button>
       <p id="setupError" class="error"></p>
+      <p id="secureHint" class="announce hidden">当前为 HTTP 访问，浏览器禁止调用摄像头/麦克风。改用 HTTPS 访问可双向通话，或安装 VCall APK。</p>
       <p id="announcement" class="announce"></p>
       <p class="hint muted">同一房间最多 2 台设备。手机 / 电视请安装 VCall APK 获得更佳效果。</p>
     </div>

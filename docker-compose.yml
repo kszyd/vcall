@@ -12,6 +12,7 @@ services:
     restart: unless-stopped
     ports:
       - "9002:9002"
+      - "9443:9443"
     environment:
       VCALL_PORT: "9002"
       VCALL_DATA_DIR: "/data"
@@ -26,8 +27,12 @@ services:
       VCALL_TURN_URL: ""
       VCALL_TURN_USER: ""
       VCALL_TURN_PASS: ""
+      VCALL_TLS_PORT: "9443"
+      VCALL_TLS_CERT: ""
+      VCALL_TLS_KEY: ""
     volumes:
       - ./data:/data
+      - ./certs:/certs:ro
     healthcheck:
       test:
         - CMD

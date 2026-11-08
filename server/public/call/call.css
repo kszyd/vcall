@@ -182,6 +182,17 @@ input:focus {
   line-height: 1.6;
 }
 
+.btn.secondary {
+  background: transparent;
+  border-color: var(--line);
+  color: var(--muted);
+}
+
+.btn.secondary:hover {
+  color: var(--text);
+  border-color: #33507c;
+}
+
 .hint {
   font-size: 12px;
   margin: 14px 0 0;

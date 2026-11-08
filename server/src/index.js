@@ -1,6 +1,7 @@
 'use strict';
 
 const http = require('http');
+const https = require('https');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -65,7 +66,7 @@ function sendJson(res, status, payload) {
   res.end(body);
 }
 
-const server = http.createServer(async (req, res) => {
+const requestHandler = async (req, res) => {
   let url;
   try {
     url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
@@ -105,13 +106,45 @@ const server = http.createServer(async (req, res) => {
 
   sendJson(res, 404, { ok: false, error: 'not_found' });
   return undefined;
-});
+};
+
+const server = http.createServer(requestHandler);
 
 attachWebSocket(server, {
   path: '/ws',
   trustProxy: config.trustProxy,
   onConnection: (ws) => signaling.handleConnection(ws),
 });
+
+// 可选 HTTPS：浏览器调用摄像头/麦克风要求 HTTPS 或 localhost
+let tlsServer = null;
+if (config.tlsCert && config.tlsKey && fs.existsSync(config.tlsCert) && fs.existsSync(config.tlsKey)) {
+  try {
+    tlsServer = https.createServer(
+      { cert: fs.readFileSync(config.tlsCert), key: fs.readFileSync(config.tlsKey) },
+      requestHandler
+    );
+    attachWebSocket(tlsServer, {
+      path: '/ws',
+      trustProxy: config.trustProxy,
+      onConnection: (ws) => signaling.handleConnection(ws),
+    });
+    tlsServer.on('error', (err) => {
+      logger.error('HTTPS 服务异常', { error: String(err && err.message) });
+    });
+    tlsServer.listen(config.tlsPort, config.host, () => {
+      logger.info('HTTPS 已启用', { listen: `${config.host}:${config.tlsPort}` });
+    });
+  } catch (err) {
+    logger.error('HTTPS 启动失败，仅使用 HTTP', { error: String(err && err.message) });
+    tlsServer = null;
+  }
+} else if (config.tlsCert || config.tlsKey) {
+  logger.warn('已配置 TLS 但证书文件不存在，跳过 HTTPS', {
+    cert: config.tlsCert,
+    key: config.tlsKey,
+  });
+}
 
 function localAddresses() {
   const list = [];
@@ -134,6 +167,10 @@ server.listen(config.port, config.host, () => {
   console.log(`  管理后台    http://${addresses[0] || '127.0.0.1'}:${config.port}/admin`);
   console.log(`  网页通话    http://${addresses[0] || '127.0.0.1'}:${config.port}/call`);
   console.log(`  信令地址    ws://${addresses[0] || '127.0.0.1'}:${config.port}/ws`);
+  if (tlsServer) {
+    console.log(`  网页通话TLS https://${addresses[0] || '127.0.0.1'}:${config.tlsPort}/call`);
+    console.log(`  信令地址TLS wss://${addresses[0] || '127.0.0.1'}:${config.tlsPort}/ws`);
+  }
   if (addresses.length > 1) console.log(`  其他地址    ${addresses.join('  ')}`);
   console.log(`  管理账号    ${config.adminUser} / ${config.adminSecret ? '(已通过环境变量设置)' : config.adminPassword}`);
   console.log('');
@@ -146,6 +183,11 @@ server.on('error', (err) => {
 
 function shutdown(signal) {
   logger.info('收到退出信号，正在关闭服务', { signal });
+  try {
+    if (tlsServer) tlsServer.close();
+  } catch (err) {
+    // ignore
+  }
   server.close(() => process.exit(0));
   setTimeout(() => process.exit(0), 5000).unref();
 }

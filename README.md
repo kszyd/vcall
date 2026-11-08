@@ -118,6 +118,25 @@ kubectl -n vcall rollout status deploy/vcall
 
 所有配置直接写在 `deploy/docker-compose.yaml` 的 `environment` 中，不使用 `.env` 文件；数据目录为 `deploy/data`（即相对 compose 文件的 `./data`）。
 
+### 网页端摄像头权限（重要）
+
+浏览器只在**安全上下文**（HTTPS 或 localhost）下允许 `getUserMedia`。直接打开 `http://192.168.199.100:9002/call` 时，页面会提示改用「仅接收加入」（可正常观看对方画面，但本机不采集）。
+
+需要网页端双向通话时，启用内置 HTTPS：
+
+```bash
+./scripts/gen-cert.sh 192.168.199.100
+```
+
+在 `deploy/docker-compose.yaml` 中填入容器内路径并重启：
+
+```yaml
+      VCALL_TLS_CERT: "/certs/server.crt"
+      VCALL_TLS_KEY: "/certs/server.key"
+```
+
+然后访问 `https://192.168.199.100:9443/call`，首次需在浏览器信任该自签证书。Android APK 使用原生 WebRTC，不受此限制。
+
 ## 二、Android 客户端
 
 ### 下载安装
@@ -155,6 +174,8 @@ APK 使用 debug 签名，可直接安装并覆盖升级；电视可用 U 盘或
 | `VCALL_TURN_URL` | 空 | TURN 地址，跨网段/防火墙时需要 |
 | `VCALL_TURN_USER` / `VCALL_TURN_PASS` | 空 | TURN 账号 |
 | `VCALL_DATA_DIR` | `/data` | 数据卷（设置持久化） |
+| `VCALL_TLS_PORT` | `9443` | HTTPS 端口，配置证书后生效 |
+| `VCALL_TLS_CERT` / `VCALL_TLS_KEY` | 空 | 证书/私钥容器内路径，留空则仅 HTTP |
 | `VCALL_LOG_LEVEL` | `info` | `debug`/`info`/`warn`/`error` |
 
 > 纯内网（同一网段、无客户端隔离）无需 STUN/TURN 即可直连。

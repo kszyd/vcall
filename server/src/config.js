@@ -87,6 +87,11 @@ const config = {
   host: process.env.VCALL_HOST || '0.0.0.0',
   publicUrl: (process.env.VCALL_PUBLIC_URL || '').trim(),
 
+  // 可选 HTTPS：浏览器调用摄像头/麦克风要求 HTTPS 或 localhost
+  tlsPort: int('VCALL_TLS_PORT', 9443),
+  tlsCert: (process.env.VCALL_TLS_CERT || '').trim(),
+  tlsKey: (process.env.VCALL_TLS_KEY || '').trim(),
+
   adminUser: process.env.VCALL_ADMIN_USER || 'admin',
   adminPassword: process.env.VCALL_ADMIN_PASSWORD || 'vcall@2026',
   adminTokenTtl: int('VCALL_ADMIN_TOKEN_TTL', 12 * 3600),
