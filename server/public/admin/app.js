@@ -7,10 +7,8 @@
   const state = {
     token: sessionStorage.getItem(TOKEN_KEY) || '',
     timer: null,
-    overview: null,
-    lastRooms: [],
-    loading: false,
     failures: 0,
+    loading: false,
   };
 
   const $ = (id) => document.getElementById(id);
@@ -112,18 +110,18 @@
     if (state.loading || !state.token) return;
     state.loading = true;
     try {
-      const [overview, rooms, devices, metrics, logs] = await Promise.all([
+      const [overview, calls, terminals, metrics, logs] = await Promise.all([
         api('/api/admin/overview'),
-        api('/api/admin/rooms'),
-        api('/api/admin/devices'),
+        api('/api/admin/calls'),
+        api('/api/admin/terminals'),
         api('/api/admin/metrics'),
-        api('/api/admin/logs?limit=80' + (($('logLevel').value) ? '&level=' + $('logLevel').value : '')),
+        api('/api/admin/logs?limit=80' + ($('logLevel').value ? '&level=' + $('logLevel').value : '')),
       ]);
       state.failures = 0;
       setConnected(true);
       renderOverview(overview.overview);
-      renderRooms(rooms.rooms);
-      renderDevices(devices.devices);
+      renderCalls(calls.calls || []);
+      renderTerminals(terminals.terminals || []);
       renderMetrics(metrics.samples);
       renderHistory(metrics.history);
       renderLogs(logs.logs);
@@ -141,7 +139,7 @@
     pill.classList.toggle('off', !ok);
   }
 
-  /* ------------------------------ 渲染 ------------------------------ */
+  /* ------------------------------ 格式化 ------------------------------ */
 
   function formatDuration(seconds) {
     const s = Math.max(0, Math.round(seconds || 0));
@@ -160,13 +158,14 @@
     return pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
   }
 
+  /* ------------------------------ 渲染 ------------------------------ */
+
   function renderOverview(o) {
-    state.overview = o;
-    $('statOnline').textContent = o.onlineDevices;
+    $('statOnline').textContent = o.onlineTerminals;
     $('statPeak').textContent = '峰值 ' + o.peakOnline;
-    $('statRooms').textContent = o.activeRooms;
-    $('statCalls').textContent = o.activeCalls;
-    $('statTotalCalls').textContent = '累计 ' + o.totalCalls + ' 次';
+    $('statRooms').textContent = o.activeCalls;
+    $('statCalls').textContent = o.totalCalls;
+    $('statTotalCalls').textContent = '共 ' + o.totalCalls + ' 次';
     $('statUptime').textContent =
       o.uptimeSeconds >= 3600
         ? Math.floor(o.uptimeSeconds / 3600) + 'h'
@@ -174,36 +173,41 @@
     $('statVersion').textContent = 'v' + o.version;
     $('footVersion').textContent = 'v' + o.version;
     $('serverInfo').textContent =
-      '运行 ' + formatDuration(o.uptimeSeconds) + ' · 单房间上限 ' + o.maxRoomMembers + ' 人';
+      '运行 ' + formatDuration(o.uptimeSeconds) + ' · 单次通话上限 ' + o.maxCallMembers + ' 人';
 
     if (document.activeElement !== $('announcement')) $('announcement').value = o.announcement || '';
-    if (document.activeElement !== $('maxMembers')) $('maxMembers').value = o.maxRoomMembers;
+    if (document.activeElement !== $('maxMembers')) $('maxMembers').value = o.maxCallMembers;
   }
 
-  function renderRooms(rooms) {
+  function stateLabel(state) {
+    if (state === 'busy') return '通话中';
+    if (state === 'ringing') return '响铃中';
+    return '空闲';
+  }
+
+  function renderCalls(calls) {
     const body = $('roomsBody');
     body.textContent = '';
-    $('roomsMeta').textContent = '共 ' + rooms.length + ' 个';
-    state.lastRooms = rooms;
+    $('roomsMeta').textContent = '共 ' + calls.length + ' 个';
 
-    if (!rooms.length) {
+    if (!calls.length) {
       const tr = el('tr');
-      const td = el('td', 'empty', '暂无房间，等待设备加入');
+      const td = el('td', 'empty', '暂无通话，等待终端发起');
       td.colSpan = 6;
       tr.appendChild(td);
       body.appendChild(tr);
       return;
     }
 
-    for (const room of rooms) {
+    for (const call of calls) {
       const tr = el('tr');
 
       const tdId = el('td');
-      tdId.appendChild(el('span', 'room-id', room.id));
+      tdId.appendChild(el('span', 'room-id', call.id));
       tr.appendChild(tdId);
 
       const tdMembers = el('td');
-      for (const member of room.members) {
+      for (const member of call.members) {
         const line = el('div', 'member');
         line.appendChild(el('span', '', member.name || '未命名'));
         if (member.isTv) line.appendChild(el('span', 'tag tv', 'TV'));
@@ -211,25 +215,26 @@
         if (member.muted && member.muted.audio) line.appendChild(el('span', 'tag muted', '静音'));
         tdMembers.appendChild(line);
       }
+      if (call.invited && call.invited.length) {
+        tdMembers.appendChild(el('div', 'mono', '邀请中：' + call.invited.map((x) => x.name).join('、')));
+      }
       tr.appendChild(tdMembers);
 
       const tdState = el('td');
-      tdState.appendChild(
-        el('span', 'tag' + (room.inCall ? ' live' : ''), room.inCall ? '通话中' : '等待中')
-      );
+      tdState.appendChild(el('span', 'tag' + (call.inCall ? ' live' : ''), call.inCall ? '通话中' : '呼叫中'));
       tr.appendChild(tdState);
 
-      const tdDur = el('td', 'mono', room.inCall ? formatDuration(room.callDurationSeconds) : '—');
+      const tdDur = el('td', 'mono', call.inCall ? formatDuration(call.durationSeconds) : '—');
       tr.appendChild(tdDur);
 
       const tdMedia = el('td');
-      const stats = room.members.find((m) => m.stats)?.stats;
-      if (stats) {
+      const stat = call.members.find((m) => m.stats)?.stats;
+      if (stat) {
         const parts = [];
-        if (stats.width && stats.height) parts.push(stats.width + '×' + stats.height);
-        if (stats.fps) parts.push(stats.fps + 'fps');
-        if (stats.bitrate) parts.push(Math.round(stats.bitrate / 1000) + 'kbps');
-        if (stats.rtt) parts.push(stats.rtt + 'ms');
+        if (stat.width && stat.height) parts.push(stat.width + '×' + stat.height);
+        if (stat.fps) parts.push(stat.fps + 'fps');
+        if (stat.bitrate) parts.push(Math.round(stat.bitrate / 1000) + 'kbps');
+        if (stat.rtt) parts.push(stat.rtt + 'ms');
         tdMedia.appendChild(el('span', 'mono', parts.join(' · ') || '—'));
       } else {
         tdMedia.appendChild(el('span', 'mono', '—'));
@@ -237,10 +242,10 @@
       tr.appendChild(tdMedia);
 
       const tdAction = el('td', 'right');
-      for (const member of room.members) {
-        const btn = el('button', 'btn danger small', '断开 ' + (member.name || '设备'));
+      for (const member of call.members) {
+        const btn = el('button', 'btn danger small', '下线 ' + (member.name || '终端'));
         btn.type = 'button';
-        btn.addEventListener('click', () => kick(room.id, member.id, member.name));
+        btn.addEventListener('click', () => kick(member.id, member.name));
         btn.style.marginLeft = '6px';
         tdAction.appendChild(btn);
       }
@@ -249,37 +254,36 @@
     }
   }
 
-  function renderDevices(devices) {
+  function renderTerminals(terminals) {
     const body = $('devicesBody');
     body.textContent = '';
-    $('devicesMeta').textContent = devices.length + ' 台';
-    if (!devices.length) {
+    $('devicesMeta').textContent = terminals.length + ' 台';
+    if (!terminals.length) {
       const tr = el('tr');
-      const td = el('td', 'empty', '暂无在线设备');
+      const td = el('td', 'empty', '暂无在线终端');
       td.colSpan = 5;
       tr.appendChild(td);
       body.appendChild(tr);
       return;
     }
-    for (const device of devices) {
+    for (const item of terminals) {
       const tr = el('tr');
       const tdName = el('td');
-      tdName.appendChild(el('div', '', device.name || '未命名'));
-      const meta = [device.model, device.appVersion ? 'v' + device.appVersion : '']
-        .filter(Boolean)
-        .join(' · ');
+      tdName.appendChild(el('div', '', item.name || '未命名'));
+      const meta = [item.model, item.appVersion ? 'v' + item.appVersion : ''].filter(Boolean).join(' · ');
       if (meta) tdName.appendChild(el('div', 'mono', meta));
       tr.appendChild(tdName);
 
       const tdPlatform = el('td');
-      tdPlatform.appendChild(
-        el('span', 'tag' + (device.isTv ? ' tv' : ''), device.isTv ? '电视' : device.platform || '手机')
-      );
+      tdPlatform.appendChild(el('span', 'tag' + (item.isTv ? ' tv' : ''), item.isTv ? '电视' : item.platform || '手机'));
       tr.appendChild(tdPlatform);
 
-      tr.appendChild(el('td', 'room-id', device.room || '—'));
-      tr.appendChild(el('td', 'mono', device.ip || '—'));
-      tr.appendChild(el('td', 'mono', formatDuration(device.onlineSeconds)));
+      const tdState = el('td');
+      tdState.appendChild(el('span', 'tag' + (item.state === 'busy' ? ' live' : ''), stateLabel(item.state)));
+      tr.appendChild(tdState);
+
+      tr.appendChild(el('td', 'mono', item.ip || '—'));
+      tr.appendChild(el('td', 'mono', formatDuration(item.onlineSeconds)));
       body.appendChild(tr);
     }
   }
@@ -297,7 +301,7 @@
     }
     for (const item of history.slice(0, 20)) {
       const tr = el('tr');
-      tr.appendChild(el('td', 'room-id', item.room));
+      tr.appendChild(el('td', 'room-id', item.id));
       tr.appendChild(el('td', 'mono', formatClock(item.startedAt)));
       tr.appendChild(el('td', '', formatDuration(item.duration)));
       tr.appendChild(el('td', 'mono', String(item.members || 0)));
@@ -324,9 +328,7 @@
       return;
     }
 
-    const maxOnline = Math.max(1, ...data.map((s) => s.online));
-    const maxCalls = Math.max(1, ...data.map((s) => s.calls));
-    const max = Math.max(maxOnline, maxCalls);
+    const max = Math.max(1, ...data.map((s) => s.online), ...data.map((s) => s.calls));
 
     const buildPath = (key) =>
       data
@@ -390,14 +392,14 @@
 
   /* ------------------------------ 操作 ------------------------------ */
 
-  async function kick(roomId, peerId, name) {
-    if (!confirm('确认断开「' + (name || '该设备') + '」？')) return;
+  async function kick(terminalId, name) {
+    if (!confirm('确认将「' + (name || '该终端') + '」下线？')) return;
     try {
-      await api('/api/admin/rooms/' + encodeURIComponent(roomId) + '/kick', {
+      await api('/api/admin/terminals/' + encodeURIComponent(terminalId) + '/kick', {
         method: 'POST',
-        body: JSON.stringify({ peerId }),
+        body: '{}',
       });
-      toast('已断开 ' + (name || '设备'));
+      toast('已下线 ' + (name || '终端'));
       refresh();
     } catch (err) {
       toast(err.message);
@@ -412,7 +414,7 @@
         method: 'POST',
         body: JSON.stringify({
           announcement: $('announcement').value,
-          maxRoomMembers: Number($('maxMembers').value),
+          maxCallMembers: Number($('maxMembers').value),
         }),
       });
       $('settingsHint').textContent = '已保存 · ' + formatClock(Date.now());

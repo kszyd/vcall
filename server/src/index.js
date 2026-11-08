@@ -24,7 +24,7 @@ try {
   if (fs.existsSync(settingsPath)) {
     const saved = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
     if (typeof saved.announcement === 'string') config.announcement = saved.announcement;
-    if (Number.isInteger(saved.maxRoomMembers)) config.maxRoomMembers = saved.maxRoomMembers;
+    if (Number.isInteger(saved.maxCallMembers)) config.maxCallMembers = saved.maxCallMembers;
   }
 } catch (err) {
   logger.warn('读取持久化设置失败', { error: String(err && err.message) });

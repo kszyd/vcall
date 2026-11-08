@@ -97,9 +97,7 @@ const config = {
   adminTokenTtl: int('VCALL_ADMIN_TOKEN_TTL', 12 * 3600),
   adminSecret: process.env.VCALL_ADMIN_SECRET || '',
 
-  maxRoomMembers: int('VCALL_MAX_ROOM_MEMBERS', 2),
-  roomIdleSeconds: int('VCALL_ROOM_IDLE_SECONDS', 300),
-  maxRooms: int('VCALL_MAX_ROOMS', 200),
+  maxCallMembers: int('VCALL_MAX_CALL_MEMBERS', 6),
   heartbeatSeconds: int('VCALL_HEARTBEAT_SECONDS', 30),
   heartbeatTimeoutSeconds: int('VCALL_HEARTBEAT_TIMEOUT_SECONDS', 90),
 

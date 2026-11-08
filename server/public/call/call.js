@@ -1,21 +1,28 @@
 'use strict';
 
+/**
+ * VCall 网页端 v2：登录 -> 在线通讯录 -> 点选呼叫（支持多人 Mesh）
+ */
 (function () {
   const $ = (id) => document.getElementById(id);
 
   const state = {
     ws: null,
     selfId: '',
-    room: '',
     name: '',
     localStream: null,
     receiveOnly: false,
-    peers: new Map(), // peerId -> { pc, name, pendingIce: [] }
-    iceServers: [],
+    devices: [],
+    selected: new Set(),
+    callId: null,
+    callVideo: true,
+    peers: new Map(), // peerId -> { pc, name, pendingIce }
+    peerNames: new Map(),
     micOn: true,
     camOn: true,
+    callStartAt: 0,
+    timer: null,
     statsTimer: null,
-    waitTimer: null,
   };
 
   function toast(message) {
@@ -26,25 +33,12 @@
     toast._t = setTimeout(() => node.classList.add('hidden'), 2600);
   }
 
-  function setError(message) {
-    $('setupError').textContent = message || '';
-  }
-
-  function serverBase() {
-    const raw = ($('server').value || '').trim().replace(/\/+$/, '');
-    if (!raw) return location.host;
-    return raw.replace(/^https?:\/\//, '').replace(/^wss?:\/\//, '');
-  }
-
-  function isSecureContextOk() {
+  function isSecure() {
     return Boolean(navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function');
   }
 
-  /**
-   * 打开本地摄像头/麦克风。非 HTTPS/localhost 时抛出 code=insecure 的错误。
-   */
   async function openMedia(withAudio) {
-    if (!isSecureContextOk()) {
+    if (!isSecure()) {
       const err = new Error('浏览器要求 HTTPS 或 localhost 才能访问摄像头/麦克风');
       err.code = 'insecure';
       throw err;
@@ -55,64 +49,63 @@
     });
   }
 
-  /* ------------------------------ 加入流程 ------------------------------ */
+  function serverHost() {
+    const raw = ($('server').value || '').trim().replace(/\/+$/, '');
+    if (!raw) return location.host;
+    return raw.replace(/^https?:\/\//, '').replace(/^wss?:\/\//, '');
+  }
 
-  async function join(receiveOnly) {
-    setError('');
-    const room = ($('room').value || '').trim();
-    const name = ($('name').value || '').trim() || '网页设备';
-    if (!/^[0-9A-Za-z_-]{1,32}$/.test(room)) {
-      setError('房间号只能包含字母、数字、下划线、短横线（1-32 位）');
+  /* ------------------------------ 登录 ------------------------------ */
+
+  async function connect() {
+    $('loginError').textContent = '';
+    const name = ($('name').value || '').trim() || '网页终端';
+    const host = serverHost();
+    if (!host) {
+      $('loginError').textContent = '请填写服务器地址';
       return;
     }
 
-    const btn = $('joinBtn');
+    const btn = $('connectBtn');
     btn.disabled = true;
-    btn.textContent = state.receiveOnly || receiveOnly ? '正在加入…' : '正在打开摄像头…';
-    $('receiveOnlyBtn').classList.add('hidden');
+    btn.textContent = '连接中…';
 
     try {
-      state.room = room;
       state.name = name;
-      state.receiveOnly = Boolean(receiveOnly);
       localStorage.setItem('vcall.server', $('server').value.trim());
       localStorage.setItem('vcall.name', name);
-      localStorage.setItem('vcall.room', room);
 
-      if (!state.receiveOnly && !state.localStream) {
-        state.localStream = await openMedia($('joinAudio').checked);
-        state.micOn = $('joinAudio').checked;
-      }
-      if (state.localStream) {
-        $('localVideo').srcObject = state.localStream;
+      if (!state.localStream) {
+        try {
+          state.localStream = await openMedia(true);
+          $('localVideo').srcObject = state.localStream;
+        } catch (err) {
+          if (err && err.code === 'insecure') {
+            state.receiveOnly = true;
+            $('secureHint').classList.remove('hidden');
+          } else if (err && err.name === 'NotAllowedError') {
+            state.receiveOnly = true;
+            $('secureHint').classList.remove('hidden');
+            $('secureHint').textContent = '摄像头/麦克风权限被拒绝，将以仅接收模式加入。';
+          } else {
+            throw err;
+          }
+        }
       }
 
-      const base = serverBase();
-      const proto = location.protocol === 'https:' ? 'wss' : 'ws';
       const config = await fetch(location.origin + '/api/config')
         .then((r) => r.json())
         .catch(() => ({ iceServers: [] }));
       state.iceServers = config.iceServers || [];
 
-      const ws = new WebSocket(`${proto}://${base}/ws`);
+      const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+      const ws = new WebSocket(proto + '://' + host + '/ws');
       state.ws = ws;
       bindSocket(ws);
     } catch (err) {
-      if (err && err.code === 'insecure') {
-        setError(
-          '当前是 HTTP 访问，浏览器禁止使用摄像头/麦克风（仅 HTTPS 或 localhost 可用）。可点击下方「仅接收加入」观看对方画面，或安装 VCall APK 进行双向通话。'
-        );
-        $('receiveOnlyBtn').classList.remove('hidden');
-      } else if (err && (err.name === 'NotAllowedError' || err.name === 'SecurityError')) {
-        setError('摄像头/麦克风权限被拒绝，请在浏览器地址栏允许后重试。');
-      } else if (err && err.name === 'NotFoundError') {
-        setError('未检测到摄像头或麦克风，可点击「仅接收加入」。');
-        $('receiveOnlyBtn').classList.remove('hidden');
-      } else {
-        setError('无法打开摄像头/麦克风：' + (err && err.message ? err.message : err));
-      }
+      $('loginError').textContent = '连接失败：' + (err && err.message ? err.message : err);
       btn.disabled = false;
-      btn.textContent = '加入房间';
+      btn.textContent = '进入通讯录';
     }
   }
 
@@ -120,9 +113,9 @@
     ws.onopen = () => {
       ws.send(
         JSON.stringify({
-          type: 'join',
-          room: state.room,
+          type: 'register',
           name: state.name,
+          deviceId: localStorage.getItem('vcall.deviceId') || '',
           device: {
             platform: 'web',
             os: navigator.platform || 'browser',
@@ -140,165 +133,375 @@
       } catch (err) {
         return;
       }
-      handleMessage(msg);
+      handle(msg);
     };
 
     ws.onclose = () => {
-      if (!$('call').classList.contains('hidden')) {
-        toast('与服务器的连接已断开');
-        hangup(true);
-      }
+      if (state.callId) leaveCall(true);
+      toast('与服务器的连接已断开');
+      $('connectBtn').disabled = false;
+      $('connectBtn').textContent = '进入通讯录';
+      showDirectory(false);
     };
 
-    ws.onerror = () => setError('无法连接信令服务器，请检查地址与端口');
+    ws.onerror = () => {
+      $('loginError').textContent = '无法连接服务器，请检查地址与端口';
+    };
   }
 
-  function handleMessage(msg) {
+  /* ------------------------------ 消息处理 ------------------------------ */
+
+  function handle(msg) {
     switch (msg.type) {
       case 'welcome':
         state.selfId = msg.id;
-        if (!state.iceServers.length) state.iceServers = msg.iceServers || [];
-        $('announcement').textContent = msg.announcement || '';
         break;
-      case 'joined':
-        showCall(msg);
-        // 后加入者主动向已有成员发起 offer，避免双方同时 offer
-        for (const peer of msg.peers || []) {
-          createOffer(peer.id, peer.name);
+
+      case 'registered':
+        state.selfId = msg.self.id;
+        localStorage.setItem('vcall.deviceId', msg.self.id);
+        $('myName').textContent = msg.self.name;
+        $('myAvatar').textContent = initial(msg.self.name);
+        $('myState').textContent = '在线 · ID ' + msg.self.id;
+        showDirectory(true);
+        break;
+
+      case 'directory':
+        state.devices = msg.terminals || [];
+        renderDirectory();
+        break;
+
+      case 'call-created':
+        state.callId = msg.callId;
+        state.callVideo = msg.video !== false;
+        state.peerNames.clear();
+        for (const m of msg.members || []) state.peerNames.set(m.id, m.name);
+        showCall('正在呼叫…');
+        break;
+
+      case 'call-incoming':
+        showIncoming(msg);
+        break;
+
+      case 'call-joined':
+        state.callId = msg.callId;
+        showCall('通话中');
+        for (const m of msg.members || []) {
+          state.peerNames.set(m.id, m.name);
+          createOffer(m.id);
         }
         break;
-      case 'peer-joined':
-        toast((msg.peer.name || '对方') + ' 已加入');
-        $('remotePlaceholder').querySelector('p').innerHTML =
-          '正在接通 <b>' + escapeHtml(msg.peer.name || '') + '</b>…';
+
+      case 'call-member-joined':
+        state.peerNames.set(msg.member.id, msg.member.name);
+        addPlaceholderTile(msg.member.id, msg.member.name);
+        toast((msg.member.name || '对方') + ' 已加入');
         break;
+
+      case 'call-member-left':
+        removePeer(msg.id);
+        toast((msg.name || '对方') + ' 已离开');
+        if (!state.peers.size) $('callTitle').textContent = '等待中…';
+        break;
+
+      case 'call-ended':
+        toast('通话已结束');
+        leaveCall(true);
+        break;
+
+      case 'call-cancelled':
+        hideIncoming();
+        toast(msg.reason === 'timeout' ? '对方无应答' : '呼叫已取消');
+        if (!state.peers.size) leaveCall(true);
+        break;
+
+      case 'call-rejected':
+        toast((msg.name || '对方') + ' 已拒绝');
+        if (!state.peers.size) leaveCall(true);
+        break;
+
+      case 'call-timeout':
+        toast((msg.name || '对方') + ' 无应答');
+        break;
+
+      case 'call-failed':
+        toast((msg.name || '该终端') + ' 正忙或已离线');
+        break;
+
       case 'offer':
         handleOffer(msg.from, msg.sdp);
         break;
+
       case 'answer':
         handleAnswer(msg.from, msg.sdp);
         break;
+
       case 'ice':
         handleIce(msg.from, msg.candidate);
         break;
-      case 'peer-left':
-      case 'peer-hangup':
-        closePeer(msg.id);
-        toast((msg.name || '对方') + ' 已离开');
-        showWaiting();
+
+      case 'member-state':
         break;
+
       case 'kicked':
-        toast(msg.reason || '已被管理员断开');
-        hangup();
+        toast(msg.reason || '已被管理员下线');
+        leaveCall(true);
         break;
+
       case 'error':
-        if (msg.code === 'room_full') {
-          setError(msg.message);
-          hangup(true);
-        } else {
-          toast(msg.message || '发生错误');
-        }
+        toast(msg.message || '发生错误');
+        if (msg.code === 'busy' || msg.code === 'no_available') hideIncoming();
         break;
+
       default:
         break;
     }
   }
 
-  function escapeHtml(text) {
-    return String(text).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  function initial(name) {
+    const text = (name || 'V').trim();
+    return text ? text.slice(0, 1).toUpperCase() : 'V';
   }
 
-  function showCall(msg) {
-    $('setup').classList.add('hidden');
-    $('call').classList.remove('hidden');
-    $('roomBadge').textContent = '房间 ' + (msg.room || state.room);
-    $('waitRoom').textContent = msg.room || state.room;
-    $('stateBadge').textContent = state.receiveOnly ? '仅接收' : '等待对方';
-    if (state.localStream) {
-      $('localVideo').srcObject = state.localStream;
-    } else {
-      $('localVideo').classList.add('hidden');
+  /* ------------------------------ 界面 ------------------------------ */
+
+  function showDirectory(show) {
+    $('login').classList.toggle('hidden', show);
+    $('directory').classList.toggle('hidden', !show);
+  }
+
+  function renderDirectory() {
+    const list = $('terminalList');
+    list.textContent = '';
+    const keyword = ($('searchInput').value || '').trim().toLowerCase();
+    const items = state.devices.filter((d) => !keyword || (d.name || '').toLowerCase().includes(keyword));
+    $('onlineCount').textContent = state.devices.length + ' 台';
+    $('emptyHint').classList.toggle('hidden', items.length > 0);
+
+    for (const device of items) {
+      const li = document.createElement('li');
+      li.className = 'terminal-item' + (state.selected.has(device.id) ? ' selected' : '');
+
+      const avatar = document.createElement('div');
+      avatar.className = 'avatar';
+      avatar.textContent = initial(device.name);
+      li.appendChild(avatar);
+
+      const info = document.createElement('div');
+      info.className = 'terminal-info';
+      const nameRow = document.createElement('div');
+      nameRow.className = 'terminal-name';
+      nameRow.appendChild(document.createTextNode(device.name || '未命名'));
+      if (device.isTv) {
+        const tag = document.createElement('span');
+        tag.className = 'tag tv';
+        tag.textContent = 'TV';
+        nameRow.appendChild(tag);
+      }
+      if (device.state === 'busy') {
+        const tag = document.createElement('span');
+        tag.className = 'tag busy';
+        tag.textContent = '通话中';
+        nameRow.appendChild(tag);
+      }
+      info.appendChild(nameRow);
+
+      const sub = document.createElement('div');
+      sub.className = 'terminal-sub';
+      sub.textContent = (device.platform === 'web' ? '网页' : '手机') + ' · ID ' + device.id;
+      info.appendChild(sub);
+      li.appendChild(info);
+
+      const check = document.createElement('div');
+      check.className = 'check';
+      check.textContent = '✓';
+      li.appendChild(check);
+
+      check.addEventListener('click', (event) => {
+        event.stopPropagation();
+        if (state.selected.has(device.id)) state.selected.delete(device.id);
+        else state.selected.add(device.id);
+        renderDirectory();
+      });
+
+      li.addEventListener('click', () => {
+        if (state.selected.size > 0) {
+          if (state.selected.has(device.id)) state.selected.delete(device.id);
+          else state.selected.add(device.id);
+          renderDirectory();
+          return;
+        }
+        if (device.state !== 'idle') {
+          toast('对方正在通话中');
+          return;
+        }
+        invite([device.id]);
+      });
+
+      list.appendChild(li);
     }
+  }
+
+  function invite(targets) {
+    if (!targets.length) {
+      toast('请先选择终端');
+      return;
+    }
+    send({ type: 'call-invite', targets, video: true });
+    state.selected.clear();
+    renderDirectory();
+  }
+
+  function showCall(title) {
+    $('directory').classList.add('hidden');
+    $('call').classList.remove('hidden');
+    $('callTitle').textContent = title;
+    if (!state.callStartAt) {
+      state.callStartAt = Date.now();
+      startTimer();
+    }
+    startStats();
     updateMicButton();
     updateCamButton();
-    startStats();
-    if (!msg.peers || !msg.peers.length) showWaiting();
-    else $('remotePlaceholder').classList.add('hidden');
-    state.waitTimer = setInterval(() => {
-      if (state.peers.size === 0) {
-        $('stateBadge').textContent = state.receiveOnly ? '仅接收 · 等待对方' : '等待对方加入…';
-      }
-    }, 3000);
   }
 
-  function showWaiting() {
-    $('remotePlaceholder').classList.remove('hidden');
-    $('remotePlaceholder').querySelector('p').innerHTML =
-      '等待对方加入房间 <b>' + escapeHtml(state.room) + '</b>';
-    $('stateBadge').textContent = state.receiveOnly ? '仅接收' : '等待对方';
+  function startTimer() {
+    clearInterval(state.timer);
+    state.timer = setInterval(() => {
+      if (!state.callStartAt) return;
+      const seconds = Math.floor((Date.now() - state.callStartAt) / 1000);
+      const mm = String(Math.floor(seconds / 60)).padStart(2, '0');
+      const ss = String(seconds % 60).padStart(2, '0');
+      $('callTimer').textContent = mm + ':' + ss;
+    }, 1000);
+  }
+
+  function leaveCall(silent) {
+    if (state.callId) send({ type: 'call-leave', callId: state.callId });
+    state.callId = null;
+    state.callStartAt = 0;
+    clearInterval(state.timer);
+    clearInterval(state.statsTimer);
+    for (const id of [...state.peers.keys()]) removePeer(id);
+    $('videoGrid').textContent = '';
+    $('call').classList.add('hidden');
+    $('directory').classList.remove('hidden');
+    $('callTimer').textContent = '00:00';
+    $('callStats').textContent = '--';
+    if (!silent) toast('通话已结束');
+  }
+
+  function showIncoming(msg) {
+    state.callId = msg.callId;
+    state.callVideo = msg.video !== false;
+    $('incomingName').textContent = msg.from.name || '对方';
+    $('incomingAvatar').textContent = initial(msg.from.name);
+    $('incomingHint').textContent = msg.group ? '邀请你加入多人通话' : '邀请你视频通话';
+    $('incoming').classList.remove('hidden');
+  }
+
+  function hideIncoming() {
+    $('incoming').classList.add('hidden');
   }
 
   /* ------------------------------ WebRTC ------------------------------ */
 
-  function createPeer(peerId, name, asOfferer) {
+  function ensurePeer(peerId, name) {
     let entry = state.peers.get(peerId);
     if (entry) return entry;
 
-    const pc = new RTCPeerConnection({ iceServers: state.iceServers, bundlePolicy: 'max-bundle' });
-    entry = { pc, name: name || '对方', pendingIce: [] };
+    const pc = new RTCPeerConnection({ iceServers: state.iceServers || [], bundlePolicy: 'max-bundle' });
+    entry = { pc, name: name || state.peerNames.get(peerId) || '对方', pendingIce: [] };
     state.peers.set(peerId, entry);
 
     if (state.localStream) {
-      for (const track of state.localStream.getTracks()) {
-        pc.addTrack(track, state.localStream);
-      }
-    } else if (asOfferer) {
-      // 无本地媒体时声明只收不发，保证仍能收到对方画面
+      for (const track of state.localStream.getTracks()) pc.addTrack(track, state.localStream);
+    } else {
       pc.addTransceiver('audio', { direction: 'recvonly' });
       pc.addTransceiver('video', { direction: 'recvonly' });
     }
 
     pc.onicecandidate = (event) => {
-      if (event.candidate && state.ws && state.ws.readyState === WebSocket.OPEN) {
-        state.ws.send(JSON.stringify({ type: 'ice', to: peerId, candidate: event.candidate }));
-      }
+      if (event.candidate) send({ type: 'ice', to: peerId, callId: state.callId, candidate: event.candidate });
     };
 
     pc.ontrack = (event) => {
-      $('remoteVideo').srcObject = event.streams[0];
-      $('remotePlaceholder').classList.add('hidden');
-      $('stateBadge').textContent = '已接通';
-      clearInterval(state.waitTimer);
+      attachTile(peerId, entry.name, event.streams[0]);
     };
 
     pc.onconnectionstatechange = () => {
       if (pc.connectionState === 'connected') {
-        $('stateBadge').textContent = '已接通';
-        $('remotePlaceholder').classList.add('hidden');
+        $('callTitle').textContent = '通话中';
       } else if (pc.connectionState === 'failed') {
-        toast('连接失败，正在重试…');
         pc.restartIce();
-      } else if (pc.connectionState === 'disconnected') {
-        $('stateBadge').textContent = '连接不稳定';
       }
     };
 
+    addPlaceholderTile(peerId, entry.name);
     return entry;
   }
 
-  async function createOffer(peerId, name) {
-    const entry = createPeer(peerId, name, true);
+  function addPlaceholderTile(peerId, name) {
+    if (document.querySelector('[data-peer="' + peerId + '"]')) return;
+    const tile = document.createElement('div');
+    tile.className = 'video-tile';
+    tile.dataset.peer = peerId;
+
+    const video = document.createElement('video');
+    video.autoplay = true;
+    video.playsInline = true;
+    tile.appendChild(video);
+
+    const label = document.createElement('span');
+    label.className = 'tile-name';
+    label.textContent = name || '对方';
+    tile.appendChild(label);
+
+    $('videoGrid').appendChild(tile);
+    updateGrid();
+  }
+
+  function attachTile(peerId, name, stream) {
+    addPlaceholderTile(peerId, name);
+    const tile = document.querySelector('[data-peer="' + peerId + '"]');
+    if (!tile) return;
+    const video = tile.querySelector('video');
+    if (stream) video.srcObject = stream;
+  }
+
+  function updateGrid() {
+    const count = Math.max(1, Math.min(6, state.peers.size));
+    $('videoGrid').dataset.count = String(count);
+  }
+
+  function removePeer(peerId) {
+    const entry = state.peers.get(peerId);
+    if (entry) {
+      try {
+        entry.pc.close();
+      } catch (err) {
+        // ignore
+      }
+      state.peers.delete(peerId);
+    }
+    const tile = document.querySelector('[data-peer="' + peerId + '"]');
+    if (tile) tile.remove();
+    updateGrid();
+  }
+
+  async function createOffer(peerId) {
+    const entry = ensurePeer(peerId);
     const offer = await entry.pc.createOffer();
     await entry.pc.setLocalDescription(offer);
-    send({ type: 'offer', to: peerId, sdp: entry.pc.localDescription.sdp });
+    send({ type: 'offer', to: peerId, callId: state.callId, sdp: entry.pc.localDescription.sdp });
   }
 
   async function handleOffer(from, sdp) {
-    const entry = createPeer(from, '对方', false);
+    const entry = ensurePeer(from);
     await entry.pc.setRemoteDescription({ type: 'offer', sdp });
     const answer = await entry.pc.createAnswer();
     await entry.pc.setLocalDescription(answer);
-    send({ type: 'answer', to: from, sdp: entry.pc.localDescription.sdp });
+    send({ type: 'answer', to: from, callId: state.callId, sdp: entry.pc.localDescription.sdp });
     flushIce(entry);
   }
 
@@ -309,7 +512,7 @@
     flushIce(entry);
   }
 
-  async function handleIce(from, candidate) {
+  function handleIce(from, candidate) {
     if (!candidate) return;
     const entry = state.peers.get(from);
     if (!entry) return;
@@ -317,29 +520,13 @@
       entry.pendingIce.push(candidate);
       return;
     }
-    try {
-      await entry.pc.addIceCandidate(candidate);
-    } catch (err) {
-      // 忽略个别候选失败
-    }
+    entry.pc.addIceCandidate(candidate).catch(() => {});
   }
 
   function flushIce(entry) {
     for (const candidate of entry.pendingIce.splice(0)) {
       entry.pc.addIceCandidate(candidate).catch(() => {});
     }
-  }
-
-  function closePeer(peerId) {
-    const entry = state.peers.get(peerId);
-    if (!entry) return;
-    try {
-      entry.pc.close();
-    } catch (err) {
-      // ignore
-    }
-    state.peers.delete(peerId);
-    if (!state.peers.size) $('remoteVideo').srcObject = null;
   }
 
   function send(payload) {
@@ -354,10 +541,7 @@
     clearInterval(state.statsTimer);
     state.statsTimer = setInterval(async () => {
       const entry = [...state.peers.values()][0];
-      if (!entry) {
-        $('statsBadge').textContent = '--';
-        return;
-      }
+      if (!entry) return;
       try {
         const report = await entry.pc.getStats();
         let inbound = null;
@@ -370,28 +554,34 @@
         if (inbound && inbound.frameWidth) parts.push(inbound.frameWidth + '×' + inbound.frameHeight);
         if (inbound && inbound.framesPerSecond) parts.push(Math.round(inbound.framesPerSecond) + 'fps');
         if (pair && pair.currentRoundTripTime) parts.push(Math.round(pair.currentRoundTripTime * 1000) + 'ms');
-        $('statsBadge').textContent = parts.join(' · ') || '已连接';
+        $('callStats').textContent = parts.join(' · ') || '已连接';
+        send({
+          type: 'stats',
+          rtt: pair && pair.currentRoundTripTime ? Math.round(pair.currentRoundTripTime * 1000) : 0,
+          bitrate: 0,
+          width: inbound ? inbound.frameWidth || 0 : 0,
+          height: inbound ? inbound.frameHeight || 0 : 0,
+          fps: inbound ? Math.round(inbound.framesPerSecond || 0) : 0,
+        });
       } catch (err) {
         // ignore
       }
-    }, 2500);
+    }, 3000);
   }
 
   /* ------------------------------ 控制 ------------------------------ */
 
   function updateMicButton() {
     const btn = $('micBtn');
-    const enabled = Boolean(state.localStream) && state.micOn;
-    btn.textContent = enabled ? '🎤' : '🔇';
-    btn.classList.toggle('off', !enabled);
+    btn.classList.toggle('off', !state.micOn);
+    btn.textContent = state.micOn ? '🎤' : '🔇';
     btn.disabled = !state.localStream;
   }
 
   function updateCamButton() {
     const btn = $('camBtn');
-    const enabled = Boolean(state.localStream) && state.camOn;
-    btn.textContent = enabled ? '📷' : '🚫';
-    btn.classList.toggle('off', !enabled);
+    btn.classList.toggle('off', !state.camOn);
+    btn.textContent = state.camOn ? '📷' : '🚫';
     btn.disabled = !state.localStream;
   }
 
@@ -411,56 +601,33 @@
     send({ type: 'state', muted: { audio: !state.micOn, video: !state.camOn } });
   }
 
-  function hangup(silent) {
-    send({ type: 'leave' });
-    for (const peerId of [...state.peers.keys()]) closePeer(peerId);
-    if (state.ws) {
-      try {
-        state.ws.close();
-      } catch (err) {
-        // ignore
-      }
-      state.ws = null;
-    }
-    if (state.localStream) {
-      for (const track of state.localStream.getTracks()) track.stop();
-      state.localStream = null;
-    }
-    clearInterval(state.statsTimer);
-    clearInterval(state.waitTimer);
-    $('remoteVideo').srcObject = null;
-    $('localVideo').srcObject = null;
-    $('localVideo').classList.remove('hidden');
-    $('call').classList.add('hidden');
-    $('setup').classList.remove('hidden');
-    $('joinBtn').disabled = false;
-    $('joinBtn').textContent = '加入房间';
-    state.receiveOnly = false;
-    if (!silent) toast('通话已结束');
-  }
-
   /* ------------------------------ 初始化 ------------------------------ */
 
-  const savedServer = localStorage.getItem('vcall.server') || '';
-  $('server').value = savedServer;
+  $('server').value = localStorage.getItem('vcall.server') || '';
   $('server').placeholder = location.host || '192.168.199.100:9002';
   $('name').value = localStorage.getItem('vcall.name') || '';
-  $('room').value = localStorage.getItem('vcall.room') || '1001';
+  if (!isSecure()) $('secureHint').classList.remove('hidden');
 
-  $('joinBtn').addEventListener('click', () => join(false));
-  $('receiveOnlyBtn').addEventListener('click', () => join(true));
+  $('connectBtn').addEventListener('click', connect);
+  $('logoutBtn').addEventListener('click', () => {
+    if (state.ws) state.ws.close();
+  });
+  $('searchInput').addEventListener('input', renderDirectory);
+  $('groupBtn').addEventListener('click', () => invite([...state.selected]));
+  $('acceptBtn').addEventListener('click', () => {
+    if (!state.callId) return;
+    send({ type: 'call-accept', callId: state.callId });
+    hideIncoming();
+  });
+  $('rejectBtn').addEventListener('click', () => {
+    if (!state.callId) return;
+    send({ type: 'call-reject', callId: state.callId });
+    state.callId = null;
+    hideIncoming();
+  });
   $('micBtn').addEventListener('click', toggleMic);
   $('camBtn').addEventListener('click', toggleCam);
-  $('hangupBtn').addEventListener('click', () => hangup());
-  $('speakerBtn').addEventListener('click', () => {
-    const video = $('remoteVideo');
-    video.muted = !video.muted;
-    toast(video.muted ? '已静音对方声音' : '已恢复声音');
-  });
-
-  if (!isSecureContextOk()) {
-    $('secureHint').classList.remove('hidden');
-  }
+  $('hangupBtn').addEventListener('click', () => leaveCall());
 
   window.addEventListener('beforeunload', () => {
     if (state.ws) state.ws.close();

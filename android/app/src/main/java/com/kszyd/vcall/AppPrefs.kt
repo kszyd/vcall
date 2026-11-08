@@ -3,7 +3,7 @@ package com.kszyd.vcall
 import android.content.Context
 
 /**
- * 本地保存服务器地址、昵称与房间号，方便电视遥控器重复使用。
+ * 本地保存服务器地址、昵称与终端标识，方便电视遥控器重复使用。
  */
 class AppPrefs(context: Context) {
 
@@ -17,9 +17,9 @@ class AppPrefs(context: Context) {
         get() = prefs.getString(KEY_NAME, "") ?: ""
         set(value) = prefs.edit().putString(KEY_NAME, value).apply()
 
-    var room: String
-        get() = prefs.getString(KEY_ROOM, "1001") ?: "1001"
-        set(value) = prefs.edit().putString(KEY_ROOM, value).apply()
+    var deviceId: String
+        get() = prefs.getString(KEY_DEVICE_ID, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_DEVICE_ID, value).apply()
 
     var speakerOn: Boolean
         get() = prefs.getBoolean(KEY_SPEAKER, true)
@@ -29,7 +29,7 @@ class AppPrefs(context: Context) {
         const val DEFAULT_SERVER = "192.168.199.100:9002"
         private const val KEY_SERVER = "server"
         private const val KEY_NAME = "name"
-        private const val KEY_ROOM = "room"
+        private const val KEY_DEVICE_ID = "deviceId"
         private const val KEY_SPEAKER = "speaker"
     }
 }

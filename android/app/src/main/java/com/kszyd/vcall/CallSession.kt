@@ -1,8 +1,10 @@
 package com.kszyd.vcall
 
 import android.content.Context
+import android.content.res.Configuration
 import android.media.AudioManager
 import android.os.SystemClock
+import android.widget.GridLayout
 import org.json.JSONArray
 import org.json.JSONObject
 import org.webrtc.AudioSource
@@ -11,13 +13,9 @@ import org.webrtc.Camera1Enumerator
 import org.webrtc.Camera2Enumerator
 import org.webrtc.CameraVideoCapturer
 import org.webrtc.DataChannel
-import org.webrtc.DefaultVideoDecoderFactory
-import org.webrtc.DefaultVideoEncoderFactory
-import org.webrtc.EglBase
 import org.webrtc.IceCandidate
 import org.webrtc.MediaConstraints
 import org.webrtc.MediaStream
-import org.webrtc.MediaStreamTrack
 import org.webrtc.PeerConnection
 import org.webrtc.RendererCommon
 import org.webrtc.RtpReceiver
@@ -26,18 +24,17 @@ import org.webrtc.SdpObserver
 import org.webrtc.SessionDescription
 import org.webrtc.SurfaceTextureHelper
 import org.webrtc.SurfaceViewRenderer
-import org.webrtc.VideoCapturer
 import org.webrtc.VideoSource
 import org.webrtc.VideoTrack
 
 /**
- * 单路 1:1 WebRTC 会话封装：采集、推流、拉流与统计。
+ * 多人 Mesh 会话：每个对端一条 PeerConnection 与一个画面。
  */
 class CallSession(
     private val context: Context,
     private val app: VCallApp,
     private val localRenderer: SurfaceViewRenderer,
-    private val remoteRenderer: SurfaceViewRenderer
+    private val grid: GridLayout
 ) {
 
     data class StatsSnapshot(
@@ -48,13 +45,19 @@ class CallSession(
         val bitrateKbps: Int
     )
 
-    var onIceCandidate: ((IceCandidate) -> Unit)? = null
-    var onRemoteStream: (() -> Unit)? = null
-    var onConnectionState: ((String) -> Unit)? = null
+    private class PeerEntry(
+        val id: String,
+        val name: String,
+        val pc: PeerConnection,
+        val renderer: SurfaceViewRenderer
+    )
+
+    var onIceCandidate: ((peerId: String, candidate: IceCandidate) -> Unit)? = null
+    var onPeerConnected: ((peerId: String) -> Unit)? = null
     var onStats: ((StatsSnapshot) -> Unit)? = null
     var onError: ((String) -> Unit)? = null
 
-    private var peerConnection: PeerConnection? = null
+    private val peers = LinkedHashMap<String, PeerEntry>()
     private var videoCapturer: CameraVideoCapturer? = null
     private var videoSource: VideoSource? = null
     private var videoTrack: VideoTrack? = null
@@ -62,18 +65,18 @@ class CallSession(
     private var audioTrack: AudioTrack? = null
     private var surfaceHelper: SurfaceTextureHelper? = null
 
-    private val pendingCandidates = mutableListOf<IceCandidate>()
     private var iceServers: List<PeerConnection.IceServer> = emptyList()
-
     private var frontCamera = true
     private var hasVideo = false
     private var released = false
-
     private var lastBytes = 0L
     private var lastStatsAt = 0L
 
     private val audioManager: AudioManager
         get() = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+
+    val peerCount: Int
+        get() = peers.size
 
     /* ------------------------------ 初始化 ------------------------------ */
 
@@ -83,20 +86,12 @@ class CallSession(
         localRenderer.setEnableHardwareScaler(true)
         localRenderer.setMirror(true)
         localRenderer.setZOrderMediaOverlay(true)
-
-        remoteRenderer.init(app.eglBase.eglBaseContext, null)
-        remoteRenderer.setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FIT)
-        remoteRenderer.setEnableHardwareScaler(true)
-        remoteRenderer.setMirror(false)
     }
 
     fun setIceServers(servers: List<PeerConnection.IceServer>) {
         iceServers = servers
     }
 
-    /**
-     * 启动本地采集。返回是否成功启动了摄像头。
-     */
     fun startLocalMedia(): Boolean {
         if (released) return false
         startVideoCapture()
@@ -137,7 +132,6 @@ class CallSession(
             val name = pickCamera(enumerator.deviceNames, front) { enumerator.isFrontFacing(it) }
             if (name != null) return enumerator.createCapturer(name, null)
         } catch (ignored: Throwable) {
-            // 部分老设备 Camera2 不可用，回退到 Camera1
         }
         try {
             val enumerator = Camera1Enumerator(true)
@@ -148,11 +142,7 @@ class CallSession(
         return null
     }
 
-    private fun pickCamera(
-        names: Array<String>,
-        front: Boolean,
-        isFront: (String) -> Boolean
-    ): String? {
+    private fun pickCamera(names: Array<String>, front: Boolean, isFront: (String) -> Boolean): String? {
         if (names.isEmpty()) return null
         val preferred = names.firstOrNull { if (front) isFront(it) else !isFront(it) }
         return preferred ?: names.first()
@@ -168,30 +158,87 @@ class CallSession(
         }
     }
 
-    /* ------------------------------ 连接管理 ------------------------------ */
+    /* ------------------------------ 对端管理 ------------------------------ */
 
-    fun createPeerConnection() {
-        closePeerConnection()
+    fun ensurePeer(peerId: String, name: String): PeerConnection {
+        peers[peerId]?.let { return it.pc }
+
+        val renderer = SurfaceViewRenderer(context)
+        renderer.init(app.eglBase.eglBaseContext, null)
+        renderer.setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FILL)
+        renderer.setEnableHardwareScaler(true)
+        renderer.setMirror(false)
+
         val config = PeerConnection.RTCConfiguration(iceServers).apply {
             sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN
             bundlePolicy = PeerConnection.BundlePolicy.MAXBUNDLE
             rtcpMuxPolicy = PeerConnection.RtcpMuxPolicy.REQUIRE
             continualGatheringPolicy = PeerConnection.ContinualGatheringPolicy.GATHER_CONTINUALLY
-            iceTransportsType = PeerConnection.IceTransportsType.ALL
         }
-        val pc = app.factory.createPeerConnection(config, observer)
-        if (pc == null) {
-            onError?.invoke("无法创建通话连接")
-            return
-        }
-        peerConnection = pc
+        val pc = app.factory.createPeerConnection(config, observerFor(peerId, name, renderer))
+            ?: throw IllegalStateException("无法创建通话连接")
+
         val streamId = "vcall-stream"
         audioTrack?.let { pc.addTrack(it, listOf(streamId)) }
         videoTrack?.let { pc.addTrack(it, listOf(streamId)) }
+
+        val entry = PeerEntry(peerId, name, pc, renderer)
+        peers[peerId] = entry
+        relayout()
+        return pc
     }
 
-    fun createOffer(onSdp: (String?) -> Unit) {
-        val pc = peerConnection ?: return onSdp(null)
+    private fun observerFor(peerId: String, name: String, renderer: SurfaceViewRenderer): PeerConnection.Observer {
+        return object : PeerConnection.Observer {
+            override fun onSignalingChange(newState: PeerConnection.SignalingState?) {}
+
+            override fun onIceConnectionChange(newState: PeerConnection.IceConnectionState?) {
+                if (newState == PeerConnection.IceConnectionState.CONNECTED) {
+                    onPeerConnected?.invoke(peerId)
+                }
+            }
+
+            override fun onIceConnectionReceivingChange(receiving: Boolean) {}
+
+            override fun onIceGatheringChange(newState: PeerConnection.IceGatheringState?) {}
+
+            override fun onIceCandidate(candidate: IceCandidate?) {
+                candidate?.let { onIceCandidate?.invoke(peerId, it) }
+            }
+
+            override fun onIceCandidatesRemoved(candidates: Array<out IceCandidate>?) {}
+
+            override fun onAddStream(stream: MediaStream?) {
+                val track = stream?.videoTracks?.firstOrNull()
+                if (track != null) track.addSink(renderer)
+            }
+
+            override fun onRemoveStream(stream: MediaStream?) {}
+
+            override fun onDataChannel(dataChannel: DataChannel?) {}
+
+            override fun onRenegotiationNeeded() {}
+
+            override fun onAddTrack(receiver: RtpReceiver?, mediaStreams: Array<out MediaStream>?) {
+                val track = receiver?.track()
+                if (track is VideoTrack) track.addSink(renderer)
+            }
+
+            override fun onTrack(transceiver: RtpTransceiver?) {
+                val track = transceiver?.receiver?.track()
+                if (track is VideoTrack) track.addSink(renderer)
+            }
+        }
+    }
+
+    fun createOffer(peerId: String, name: String, onSdp: (String?) -> Unit) {
+        val pc = try {
+            ensurePeer(peerId, name)
+        } catch (t: Throwable) {
+            onError?.invoke(t.message ?: "创建连接失败")
+            onSdp(null)
+            return
+        }
         val constraints = MediaConstraints().apply {
             mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveAudio", "true"))
             mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveVideo", "true"))
@@ -209,8 +256,14 @@ class CallSession(
         }, constraints)
     }
 
-    fun handleOffer(sdp: String, onAnswer: (String?) -> Unit) {
-        val pc = peerConnection ?: return onAnswer(null)
+    fun handleOffer(peerId: String, name: String, sdp: String, onAnswer: (String?) -> Unit) {
+        val pc = try {
+            ensurePeer(peerId, name)
+        } catch (t: Throwable) {
+            onError?.invoke(t.message ?: "创建连接失败")
+            onAnswer(null)
+            return
+        }
         pc.setRemoteDescription(object : SimpleSdpObserver() {
             override fun onSetSuccess() {
                 pc.createAnswer(object : SimpleSdpObserver() {
@@ -224,7 +277,6 @@ class CallSession(
 
                     override fun onCreateFailure(error: String?) = onAnswer(null)
                 }, MediaConstraints())
-                flushPendingCandidates()
             }
 
             override fun onSetFailure(error: String?) {
@@ -234,68 +286,91 @@ class CallSession(
         }, SessionDescription(SessionDescription.Type.OFFER, sdp))
     }
 
-    fun handleAnswer(sdp: String) {
-        val pc = peerConnection ?: return
-        pc.setRemoteDescription(object : SimpleSdpObserver() {
-            override fun onSetSuccess() = flushPendingCandidates()
-            override fun onSetFailure(error: String?) {
-                onError?.invoke("设置应答失败：$error")
-            }
+    fun handleAnswer(peerId: String, sdp: String) {
+        val entry = peers[peerId] ?: return
+        entry.pc.setRemoteDescription(object : SimpleSdpObserver() {
+            override fun onSetFailure(error: String?) = onError?.invoke("设置应答失败：$error")
         }, SessionDescription(SessionDescription.Type.ANSWER, sdp))
     }
 
-    fun addIceCandidate(candidateJson: JSONObject) {
+    fun addIceCandidate(peerId: String, candidateJson: JSONObject) {
+        val entry = peers[peerId] ?: return
         val candidate = IceCandidate(
             candidateJson.optString("sdpMid"),
             candidateJson.optInt("sdpMLineIndex", 0),
             candidateJson.optString("candidate")
         )
-        val pc = peerConnection ?: return
         if (candidate.sdpMid.isNullOrEmpty() && candidate.sdp.isEmpty()) return
-        if (pc.remoteDescription == null) {
-            pendingCandidates.add(candidate)
-        } else {
-            pc.addIceCandidate(candidate)
+        try {
+            entry.pc.addIceCandidate(candidate)
+        } catch (ignored: Throwable) {
         }
     }
 
-    private fun flushPendingCandidates() {
-        val pc = peerConnection ?: return
-        val iterator = pendingCandidates.iterator()
-        while (iterator.hasNext()) {
-            val candidate = iterator.next()
-            pc.addIceCandidate(candidate)
-            iterator.remove()
+    fun closePeer(peerId: String) {
+        val entry = peers.remove(peerId) ?: return
+        try {
+            entry.pc.close()
+            entry.pc.dispose()
+        } catch (ignored: Throwable) {
         }
+        try {
+            entry.renderer.release()
+        } catch (ignored: Throwable) {
+        }
+        grid.removeView(entry.renderer)
+        relayout()
     }
 
-    fun closePeerConnection() {
-        pendingCandidates.clear()
-        try {
-            peerConnection?.close()
-        } catch (ignored: Throwable) {
+    fun closeAll() {
+        for (id in peers.keys.toList()) closePeer(id)
+    }
+
+    private fun relayout() {
+        val entries = peers.values.toList()
+        val count = entries.size
+        val portrait = context.resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT
+        val cols: Int
+        val rows: Int
+        when {
+            count <= 1 -> {
+                cols = 1
+                rows = 1
+            }
+            count == 2 -> {
+                cols = if (portrait) 1 else 2
+                rows = if (portrait) 2 else 1
+            }
+            count <= 4 -> {
+                cols = 2
+                rows = 2
+            }
+            else -> {
+                cols = 3
+                rows = 2
+            }
         }
-        try {
-            peerConnection?.dispose()
-        } catch (ignored: Throwable) {
+
+        grid.removeAllViews()
+        grid.columnCount = cols
+        grid.rowCount = rows
+        entries.forEachIndexed { index, entry ->
+            val row = if (cols == 1) index else index / cols
+            val col = if (cols == 1) 0 else index % cols
+            val params = GridLayout.LayoutParams()
+            params.width = 0
+            params.height = 0
+            params.rowSpec = GridLayout.spec(row, 1f)
+            params.columnSpec = GridLayout.spec(col, 1f)
+            params.setMargins(2, 2, 2, 2)
+            grid.addView(entry.renderer, params)
         }
-        peerConnection = null
-        try {
-            remoteRenderer.clearImage()
-        } catch (ignored: Throwable) {
-        }
-        lastBytes = 0
-        lastStatsAt = 0
     }
 
     /* ------------------------------ 控制 ------------------------------ */
 
     fun setMicrophoneEnabled(enabled: Boolean) {
         audioTrack?.setEnabled(enabled)
-    }
-
-    fun setVideoEnabled(enabled: Boolean) {
-        videoTrack?.setEnabled(enabled)
     }
 
     fun switchCamera(): Boolean {
@@ -326,11 +401,9 @@ class CallSession(
         }
     }
 
-    /* ------------------------------ 统计 ------------------------------ */
-
     fun pollStats() {
-        val pc = peerConnection ?: return
-        pc.getStats { report ->
+        val entry = peers.values.firstOrNull() ?: return
+        entry.pc.getStats { report ->
             var width = 0
             var height = 0
             var fps = 0
@@ -339,9 +412,7 @@ class CallSession(
             for (stats in report.statsMap.values) {
                 when (stats.type) {
                     "inbound-rtp" -> {
-                        if ((stats.members["kind"] as? String) == "video" ||
-                            stats.members.containsKey("frameWidth")
-                        ) {
+                        if ((stats.members["kind"] as? String) == "video" || stats.members.containsKey("frameWidth")) {
                             width = (stats.members["frameWidth"] as? Number)?.toInt() ?: width
                             height = (stats.members["frameHeight"] as? Number)?.toInt() ?: height
                             fps = (stats.members["framesPerSecond"] as? Number)?.toInt() ?: fps
@@ -376,8 +447,7 @@ class CallSession(
     fun release() {
         if (released) return
         released = true
-        closePeerConnection()
-
+        closeAll()
         try {
             videoCapturer?.stopCapture()
         } catch (ignored: Throwable) {
@@ -387,12 +457,8 @@ class CallSession(
         } catch (ignored: Throwable) {
         }
         videoCapturer = null
-
         try {
             videoTrack?.removeSink(localRenderer)
-        } catch (ignored: Throwable) {
-        }
-        try {
             videoTrack?.dispose()
         } catch (ignored: Throwable) {
         }
@@ -417,94 +483,18 @@ class CallSession(
         } catch (ignored: Throwable) {
         }
         audioSource = null
-
         try {
             localRenderer.release()
-        } catch (ignored: Throwable) {
-        }
-        try {
-            remoteRenderer.release()
         } catch (ignored: Throwable) {
         }
         restoreAudio()
     }
 
-    /* ------------------------------ 回调 ------------------------------ */
-
-    private val observer = object : PeerConnection.Observer {
-        override fun onSignalingChange(newState: PeerConnection.SignalingState?) {
-        }
-
-        override fun onIceConnectionChange(newState: PeerConnection.IceConnectionState?) {
-            when (newState) {
-                PeerConnection.IceConnectionState.CONNECTED -> onConnectionState?.invoke("connected")
-                PeerConnection.IceConnectionState.DISCONNECTED -> onConnectionState?.invoke("disconnected")
-                PeerConnection.IceConnectionState.FAILED -> onConnectionState?.invoke("failed")
-                PeerConnection.IceConnectionState.CLOSED -> onConnectionState?.invoke("closed")
-                else -> {
-                }
-            }
-        }
-
-        override fun onIceConnectionReceivingChange(receiving: Boolean) {
-        }
-
-        override fun onIceGatheringChange(newState: PeerConnection.IceGatheringState?) {
-        }
-
-        override fun onIceCandidate(candidate: IceCandidate?) {
-            candidate?.let { onIceCandidate?.invoke(it) }
-        }
-
-        override fun onIceCandidatesRemoved(candidates: Array<out IceCandidate>?) {
-        }
-
-        override fun onAddStream(stream: MediaStream?) {
-            val track = stream?.videoTracks?.firstOrNull()
-            if (track != null) {
-                track.addSink(remoteRenderer)
-                onRemoteStream?.invoke()
-            }
-        }
-
-        override fun onRemoveStream(stream: MediaStream?) {
-        }
-
-        override fun onDataChannel(dataChannel: DataChannel?) {
-        }
-
-        override fun onRenegotiationNeeded() {
-        }
-
-        override fun onAddTrack(receiver: RtpReceiver?, mediaStreams: Array<out MediaStream>?) {
-            val track = receiver?.track()
-            if (track is VideoTrack) {
-                track.addSink(remoteRenderer)
-                onRemoteStream?.invoke()
-            }
-        }
-
-        override fun onTrack(transceiver: RtpTransceiver?) {
-            val track = transceiver?.receiver?.track()
-            if (track is VideoTrack) {
-                track.addSink(remoteRenderer)
-                onRemoteStream?.invoke()
-            }
-        }
-    }
-
     open class SimpleSdpObserver : SdpObserver {
-        override fun onCreateSuccess(sdp: SessionDescription?) {
-        }
-
-        override fun onSetSuccess() {
-        }
-
-        override fun onCreateFailure(error: String?) {
-        }
-
-        override fun onSetFailure(error: String?) {
-        }
+        override fun onCreateSuccess(sdp: SessionDescription?) {}
+        override fun onSetSuccess() {}
+        override fun onCreateFailure(error: String?) {}
+        override fun onSetFailure(error: String?) {}
     }
 
     companion object {
@@ -532,7 +522,5 @@ class CallSession(
             }
             return result
         }
-
-        fun buildIceServers(raw: JSONArray?): List<PeerConnection.IceServer> = parseIceServers(raw)
     }
 }

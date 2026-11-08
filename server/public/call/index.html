@@ -3,18 +3,19 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>VCall 网页通话</title>
+  <title>VCall 视频通话</title>
   <link rel="icon" href="/admin/favicon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="/call/call.css?v=1.0.1" />
+  <link rel="stylesheet" href="/call/call.css?v=2.0.0" />
 </head>
 <body>
-  <div id="setup" class="setup">
-    <div class="setup-card">
+  <!-- 登录 -->
+  <div id="login" class="screen login">
+    <div class="login-card">
       <div class="logo-row">
         <span class="logo">V</span>
         <div>
-          <h1>VCall 网页通话</h1>
-          <p class="muted">浏览器端 · 用于电脑或电视快速加入房间</p>
+          <h1>VCall 视频通话</h1>
+          <p class="muted">连上服务器即可登录，无需账号密码</p>
         </div>
       </div>
 
@@ -23,55 +24,77 @@
         <input id="server" type="text" placeholder="192.168.199.100:9002" />
       </label>
 
-      <div class="row">
-        <label class="field grow">
-          <span>昵称</span>
-          <input id="name" type="text" maxlength="24" placeholder="会议室电视" />
-        </label>
-        <label class="field grow">
-          <span>房间号</span>
-          <input id="room" type="text" maxlength="32" value="1001" />
-        </label>
-      </div>
-
-      <label class="field check">
-        <input id="joinAudio" type="checkbox" checked />
-        <span>加入时开启麦克风</span>
+      <label class="field">
+        <span>昵称</span>
+        <input id="name" type="text" maxlength="24" placeholder="会议室电视" />
       </label>
 
-      <button id="joinBtn" class="btn primary block" type="button">加入房间</button>
-      <button id="receiveOnlyBtn" class="btn secondary block hidden" type="button">仅接收加入（不启用本机摄像头）</button>
-      <p id="setupError" class="error"></p>
-      <p id="secureHint" class="announce hidden">当前为 HTTP 访问，浏览器禁止调用摄像头/麦克风。改用 HTTPS 访问可双向通话，或安装 VCall APK。</p>
-      <p id="announcement" class="announce"></p>
-      <p class="hint muted">同一房间最多 2 台设备。手机 / 电视请安装 VCall APK 获得更佳效果。</p>
+      <button id="connectBtn" class="btn primary block" type="button">进入通讯录</button>
+      <p id="loginError" class="error"></p>
+      <p id="secureHint" class="announce hidden">当前为 HTTP 访问，浏览器无法使用摄像头/麦克风，可接听并观看对方画面；双向通话请使用 VCall APK。</p>
+      <p class="hint muted">同一服务器下的终端会自动出现在通讯录中。</p>
     </div>
   </div>
 
-  <div id="call" class="call hidden">
-    <video id="remoteVideo" autoplay playsinline></video>
-    <div id="remotePlaceholder" class="placeholder">
-      <div class="pulse"></div>
-      <p>等待对方加入房间 <b id="waitRoom"></b></p>
-      <p class="muted small" id="waitHint">在手机或电视上输入相同房间号即可接通</p>
-    </div>
-    <video id="localVideo" autoplay playsinline muted></video>
+  <!-- 通讯录 -->
+  <div id="directory" class="screen directory hidden">
+    <header class="me-bar">
+      <div class="me">
+        <div class="avatar" id="myAvatar">V</div>
+        <div class="me-info">
+          <h1 id="myName">我</h1>
+          <p class="muted small" id="myState">在线</p>
+        </div>
+      </div>
+      <button id="logoutBtn" class="btn ghost small" type="button">退出</button>
+    </header>
 
-    <div class="topbar">
-      <span class="badge" id="roomBadge">房间 1001</span>
-      <span class="badge" id="stateBadge">连接中…</span>
-      <span class="badge mono" id="statsBadge">--</span>
+    <div class="list-tools">
+      <input id="searchInput" class="search" type="text" placeholder="搜索终端" />
+      <button id="groupBtn" class="btn primary small" type="button">呼叫所选</button>
+    </div>
+
+    <div class="list-head">
+      <span>在线终端</span>
+      <span class="muted small" id="onlineCount">0 台</span>
+    </div>
+
+    <ul id="terminalList" class="terminal-list"></ul>
+    <p id="emptyHint" class="empty-hint muted">暂无其他终端在线</p>
+  </div>
+
+  <!-- 通话 -->
+  <div id="call" class="call hidden">
+    <div id="videoGrid" class="video-grid"></div>
+    <video id="localVideo" class="local-video" autoplay muted playsinline></video>
+
+    <div class="call-top">
+      <span id="callTitle">通话中</span>
+      <span id="callTimer">00:00</span>
+      <span id="callStats">--</span>
     </div>
 
     <div class="controls">
       <button id="micBtn" class="ctrl" type="button" title="麦克风">🎤</button>
       <button id="camBtn" class="ctrl" type="button" title="摄像头">📷</button>
-      <button id="speakerBtn" class="ctrl" type="button" title="扬声器">🔊</button>
       <button id="hangupBtn" class="ctrl hangup" type="button" title="挂断">📵</button>
     </div>
   </div>
 
+  <!-- 来电 -->
+  <div id="incoming" class="incoming hidden">
+    <div class="incoming-card">
+      <div class="avatar big" id="incomingAvatar">V</div>
+      <h2 id="incomingName">对方</h2>
+      <p class="muted" id="incomingHint">邀请你视频通话</p>
+      <div class="incoming-actions">
+        <button id="rejectBtn" class="btn danger round-btn" type="button">拒绝</button>
+        <button id="acceptBtn" class="btn primary round-btn" type="button">接听</button>
+      </div>
+    </div>
+  </div>
+
   <div id="toast" class="toast hidden"></div>
-  <script src="/call/call.js?v=1.0.1"></script>
+  <script src="/call/call.js?v=2.0.0"></script>
 </body>
 </html>

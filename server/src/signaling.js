@@ -1,23 +1,29 @@
 'use strict';
 
+/**
+ * VCall 信令服务 v2
+ * 模型：连接 -> 注册终端 -> 在线通讯录 -> 点选呼叫（支持多人，Mesh 信令）
+ * 不再使用房间号，每个终端由服务器分配唯一 ID（客户端可带 deviceId 复用）。
+ */
+
 const crypto = require('crypto');
 
-const ROOM_RE = /^[0-9A-Za-z_-]{1,32}$/;
 const MAX_NAME = 24;
 const MAX_DEVICE_FIELD = 48;
+const RING_TIMEOUT_MS = 45 * 1000;
+const ID_RE = /^[0-9A-Za-z_-]{4,16}$/;
 
-function newId() {
-  return crypto.randomBytes(5).toString('hex');
+function newId(prefix) {
+  return (prefix || '') + crypto.randomBytes(4).toString('hex');
 }
 
 function cleanText(value, maxLength) {
   if (typeof value !== 'string') return '';
-  // 去掉控制字符，压缩空白
-  const cleaned = value
+  return value
     .replace(/[\u0000-\u001f\u007f]/g, ' ')
     .replace(/\s+/g, ' ')
-    .trim();
-  return cleaned.slice(0, maxLength);
+    .trim()
+    .slice(0, maxLength);
 }
 
 function sanitizeDevice(device) {
@@ -36,253 +42,484 @@ class SignalingService {
   constructor({ config, logger }) {
     this.config = config;
     this.logger = logger;
-    this.peers = new Map(); // id -> peer
-    this.rooms = new Map(); // roomId -> room
-    this.history = []; // 通话记录
-    this.samples = []; // 指标采样
+    this.terminals = new Map(); // id -> terminal
+    this.calls = new Map(); // callId -> call
+    this.history = [];
+    this.samples = [];
     this.startedAt = Date.now();
     this.totalCalls = 0;
     this.totalConnections = 0;
 
-    this._heartbeat = setInterval(() => this._checkHeartbeats(), 10000);
-    this._heartbeat.unref?.();
-
-    this._sampler = setInterval(() => this._sample(), 5000);
-    this._sampler.unref?.();
+    setInterval(() => this._checkHeartbeats(), 10000).unref?.();
+    setInterval(() => this._sample(), 5000).unref?.();
   }
 
-  /* ------------------------------ 连接生命周期 ------------------------------ */
+  /* ------------------------------ 连接 ------------------------------ */
 
   handleConnection(ws) {
-    const peer = {
-      id: newId(),
+    const terminal = {
+      id: newId('t'),
       ws,
       name: '',
-      roomId: null,
       device: sanitizeDevice({}),
-      ip: ws.remoteAddress,
-      userAgent: ws.userAgent,
-      joinedAt: Date.now(),
+      state: 'idle',
+      callId: null,
+      registered: false,
+      connectedAt: Date.now(),
       lastSeen: Date.now(),
       muted: { audio: false, video: false },
       stats: null,
+      ip: ws.remoteAddress,
     };
-    this.peers.set(peer.id, peer);
+    this.terminals.set(terminal.id, terminal);
     this.totalConnections += 1;
 
     ws.on('message', (text) => {
-      peer.lastSeen = Date.now();
+      terminal.lastSeen = Date.now();
       let msg;
       try {
         msg = JSON.parse(text);
       } catch (err) {
-        this._send(peer, { type: 'error', code: 'bad_json', message: '消息格式错误' });
+        this._sendError(terminal, 'bad_json', '消息格式错误');
         return;
       }
       if (!msg || typeof msg.type !== 'string') return;
       try {
-        this._handleMessage(peer, msg);
+        this._handleMessage(terminal, msg);
       } catch (err) {
         this.logger.error('处理消息失败', { type: msg.type, error: String(err && err.message) });
-        this._send(peer, { type: 'error', code: 'internal', message: '服务器处理失败' });
+        this._sendError(terminal, 'internal', '服务器处理失败');
       }
     });
+    ws.on('pong', () => {
+      terminal.lastSeen = Date.now();
+    });
+    ws.on('close', () => this._disconnect(terminal, 'connection_closed'));
+    ws.on('error', () => this._disconnect(terminal, 'socket_error'));
 
-    ws.on('close', () => this._disconnect(peer, 'connection_closed'));
-    ws.on('error', () => this._disconnect(peer, 'socket_error'));
-
-    this._send(peer, {
+    this._send(terminal, {
       type: 'welcome',
-      id: peer.id,
+      id: terminal.id,
       serverVersion: this.config.version,
       serverTime: Date.now(),
       iceServers: this.config.iceServers,
-      maxRoomMembers: this.config.maxRoomMembers,
-      heartbeatSeconds: this.config.heartbeatSeconds,
-      defaultRoom: this.config.defaultRoom,
-      announcement: this.config.announcement,
+      maxCallMembers: this.config.maxCallMembers,
+      ringTimeoutSeconds: Math.round(RING_TIMEOUT_MS / 1000),
       allowWebClient: this.config.allowWebClient,
+      announcement: this.config.announcement,
     });
   }
 
-  _disconnect(peer, reason) {
-    if (!this.peers.has(peer.id)) return;
-    this.peers.delete(peer.id);
-    if (peer.roomId) this._leaveRoom(peer, reason);
+  _disconnect(terminal, reason) {
+    if (!this.terminals.has(terminal.id)) return;
+    if (terminal.callId) this._leaveCall(terminal, terminal.callId, reason);
+
+    this.terminals.delete(terminal.id);
+    if (terminal.registered) {
+      this.logger.info('终端离线', { id: terminal.id, name: terminal.name, reason });
+      this._broadcastDirectory();
+    }
   }
 
-  /* -------------------------------- 消息处理 -------------------------------- */
+  /* ------------------------------ 消息分发 ------------------------------ */
 
-  _handleMessage(peer, msg) {
+  _handleMessage(terminal, msg) {
     switch (msg.type) {
-      case 'join':
-        this._join(peer, msg);
+      case 'register':
+        this._register(terminal, msg);
+        break;
+      case 'call-invite':
+        this._invite(terminal, msg);
+        break;
+      case 'call-accept':
+        this._accept(terminal, msg);
+        break;
+      case 'call-reject':
+        this._reject(terminal, msg);
+        break;
+      case 'call-cancel':
+        this._cancel(terminal, msg);
+        break;
+      case 'call-leave':
+      case 'hangup':
+        this._leaveCall(terminal, msg.callId || terminal.callId, 'hangup');
         break;
       case 'offer':
       case 'answer':
       case 'ice':
-        this._relay(peer, msg);
-        break;
-      case 'hangup':
-        this._hangup(peer, msg);
+        this._relay(terminal, msg);
         break;
       case 'state':
-        this._peerState(peer, msg);
+        this._state(terminal, msg);
         break;
       case 'stats':
-        this._peerStats(peer, msg);
+        this._stats(terminal, msg);
         break;
       case 'ping':
-        this._send(peer, { type: 'pong', t: msg.t, serverTime: Date.now() });
-        break;
-      case 'leave':
-        if (peer.roomId) this._leaveRoom(peer, 'client_leave');
+        this._send(terminal, { type: 'pong', t: msg.t, serverTime: Date.now() });
         break;
       default:
-        this._send(peer, { type: 'error', code: 'unknown_type', message: '未知消息类型' });
+        this._sendError(terminal, 'unknown_type', '未知消息类型');
     }
   }
 
-  _join(peer, msg) {
-    const roomId = cleanText(msg.room, 32);
-    const name = cleanText(msg.name, MAX_NAME) || '未命名设备';
+  /* ------------------------------ 注册 ------------------------------ */
 
-    if (!ROOM_RE.test(roomId)) {
-      this._send(peer, {
-        type: 'error',
-        code: 'bad_room',
-        message: '房间号只能包含字母、数字、下划线和短横线（1-32 位）',
+  _register(terminal, msg) {
+    const name = cleanText(msg.name, MAX_NAME) || '未命名终端';
+    const requested = cleanText(msg.deviceId, 16);
+
+    if (requested && ID_RE.test(requested) && requested !== terminal.id && !this.terminals.has(requested)) {
+      this.terminals.delete(terminal.id);
+      terminal.id = requested;
+      this.terminals.set(requested, terminal);
+    }
+
+    terminal.name = name;
+    terminal.device = sanitizeDevice(msg.device);
+    terminal.registered = true;
+
+    this.logger.info('终端注册', {
+      id: terminal.id,
+      name,
+      platform: terminal.device.platform,
+      tv: terminal.device.isTv,
+    });
+
+    this._send(terminal, { type: 'registered', self: this._publicTerminal(terminal, true) });
+    this._broadcastDirectory();
+  }
+
+  _broadcastDirectory() {
+    const all = [...this.terminals.values()].filter((t) => t.registered);
+    for (const viewer of all) {
+      this._send(viewer, {
+        type: 'directory',
+        self: this._publicTerminal(viewer, true),
+        terminals: all
+          .filter((t) => t.id !== viewer.id)
+          .map((t) => this._publicTerminal(t)),
       });
+    }
+  }
+
+  _publicTerminal(terminal, self) {
+    const base = {
+      id: terminal.id,
+      name: terminal.name,
+      platform: terminal.device.platform,
+      isTv: terminal.device.isTv,
+      appVersion: terminal.device.appVersion,
+      state: terminal.state,
+      callId: terminal.callId,
+      muted: terminal.muted,
+    };
+    if (self) base.model = terminal.device.model;
+    return base;
+  }
+
+  /* ------------------------------ 呼叫 ------------------------------ */
+
+  _invite(caller, msg) {
+    if (!this._requireRegistered(caller)) return;
+    if (caller.state !== 'idle') {
+      this._sendError(caller, 'busy', '你当前正在通话中');
       return;
     }
 
-    let room = this.rooms.get(roomId);
-    if (!room) {
-      if (this.rooms.size >= this.config.maxRooms) {
-        this._send(peer, { type: 'error', code: 'server_busy', message: '服务器房间数已达上限' });
-        return;
+    const rawTargets = Array.isArray(msg.targets) ? msg.targets : msg.to ? [msg.to] : [];
+    const ids = [...new Set(rawTargets.map((x) => String(x)))].filter((id) => id && id !== caller.id);
+    if (!ids.length) {
+      this._sendError(caller, 'no_target', '请选择要呼叫的终端');
+      return;
+    }
+
+    const max = this.config.maxCallMembers;
+    if (ids.length + 1 > max) {
+      this._sendError(caller, 'too_many', `最多同时通话 ${max} 人`);
+      return;
+    }
+
+    const valid = [];
+    for (const id of ids) {
+      const target = this.terminals.get(id);
+      if (!target || !target.registered) {
+        this._send(caller, { type: 'call-failed', target: id, reason: 'offline' });
+        continue;
       }
-      room = {
-        id: roomId,
-        members: new Map(),
-        createdAt: Date.now(),
-        callStartedAt: 0,
-        lastActiveAt: Date.now(),
-        totalJoins: 0,
-      };
-      this.rooms.set(roomId, room);
+      if (target.state !== 'idle') {
+        this._send(caller, { type: 'call-failed', target: id, reason: 'busy', name: target.name });
+        continue;
+      }
+      valid.push(target);
     }
-
-    if (room.members.size >= this.config.maxRoomMembers && !room.members.has(peer.id)) {
-      this._send(peer, {
-        type: 'error',
-        code: 'room_full',
-        message: `房间已满（最多 ${this.config.maxRoomMembers} 人）`,
-      });
-      this.logger.warn('房间已满，拒绝加入', { room: roomId, peer: peer.name || peer.id });
+    if (!valid.length) {
+      this._sendError(caller, 'no_available', '对方正忙或已离线');
       return;
     }
 
-    // 若已在其他房间，先退出
-    if (peer.roomId && peer.roomId !== roomId) this._leaveRoom(peer, 'switch_room');
+    const call = {
+      id: newId('c'),
+      video: msg.video !== false,
+      createdAt: Date.now(),
+      startedAt: 0,
+      members: new Map([[caller.id, caller]]),
+      invited: new Map(),
+    };
+    this.calls.set(call.id, call);
 
-    peer.roomId = roomId;
-    peer.name = name;
-    peer.device = sanitizeDevice(msg.device);
-    peer.joinedAt = Date.now();
-    peer.muted = { audio: false, video: false };
-    peer.stats = null;
-    room.members.set(peer.id, peer);
-    room.lastActiveAt = Date.now();
-    room.totalJoins += 1;
-    if (room.members.size >= 2 && !room.callStartedAt) {
-      room.callStartedAt = Date.now();
+    caller.state = 'busy';
+    caller.callId = call.id;
+
+    for (const target of valid) {
+      target.state = 'ringing';
+      target.callId = call.id;
+      const timer = setTimeout(() => this._ringTimeout(call.id, target.id), RING_TIMEOUT_MS);
+      timer.unref?.();
+      call.invited.set(target.id, { terminal: target, timer });
+    }
+
+    this._send(caller, {
+      type: 'call-created',
+      callId: call.id,
+      video: call.video,
+      members: [...call.members.values()].map((t) => this._publicTerminal(t)),
+      invited: valid.map((t) => this._publicTerminal(t)),
+      maxMembers: max,
+    });
+
+    for (const target of valid) {
+      this._send(target, {
+        type: 'call-incoming',
+        callId: call.id,
+        video: call.video,
+        group: valid.length > 1,
+        from: this._publicTerminal(caller),
+        members: [...call.members.values()].map((t) => this._publicTerminal(t)),
+      });
+    }
+
+    this.logger.info('发起呼叫', {
+      call: call.id,
+      from: caller.name,
+      targets: valid.map((t) => t.name),
+    });
+    this._broadcastDirectory();
+  }
+
+  _accept(terminal, msg) {
+    const call = this.calls.get(msg.callId);
+    if (!call) {
+      this._sendError(terminal, 'call_not_found', '通话已结束');
+      return;
+    }
+    const invite = call.invited.get(terminal.id);
+    if (!invite) {
+      this._sendError(terminal, 'not_invited', '邀请已失效');
+      return;
+    }
+
+    clearTimeout(invite.timer);
+    call.invited.delete(terminal.id);
+    call.members.set(terminal.id, terminal);
+    terminal.state = 'busy';
+    terminal.callId = call.id;
+    if (!call.startedAt && call.members.size >= 2) {
+      call.startedAt = Date.now();
       this.totalCalls += 1;
     }
 
-    const others = [];
-    for (const member of room.members.values()) {
-      if (member.id === peer.id) continue;
-      others.push(this._publicPeer(member));
+    const others = [...call.members.values()].filter((t) => t.id !== terminal.id);
+    this._send(terminal, {
+      type: 'call-joined',
+      callId: call.id,
+      video: call.video,
+      members: others.map((t) => this._publicTerminal(t)),
+    });
+    for (const other of others) {
+      this._send(other, {
+        type: 'call-member-joined',
+        callId: call.id,
+        member: this._publicTerminal(terminal),
+      });
     }
 
-    this._send(peer, {
-      type: 'joined',
-      room: roomId,
-      self: { id: peer.id, name: peer.name },
-      peers: others,
-      callStartedAt: room.callStartedAt || 0,
-      maxRoomMembers: this.config.maxRoomMembers,
-    });
-
-    for (const member of room.members.values()) {
-      if (member.id === peer.id) continue;
-      this._send(member, { type: 'peer-joined', peer: this._publicPeer(peer) });
-    }
-
-    this.logger.info('设备加入房间', {
-      room: roomId,
-      device: peer.name,
-      platform: peer.device.platform,
-      members: room.members.size,
-    });
+    this.logger.info('接听', { call: call.id, terminal: terminal.name, members: call.members.size });
+    this._broadcastDirectory();
   }
 
-  _publicPeer(peer) {
-    return {
-      id: peer.id,
-      name: peer.name,
-      device: peer.device,
-      muted: peer.muted,
-      joinedAt: peer.joinedAt,
-    };
+  _reject(terminal, msg) {
+    const call = this.calls.get(msg.callId);
+    if (!call) return;
+    const invite = call.invited.get(terminal.id);
+    if (invite) {
+      clearTimeout(invite.timer);
+      call.invited.delete(terminal.id);
+    }
+    terminal.state = 'idle';
+    terminal.callId = null;
+
+    for (const member of call.members.values()) {
+      this._send(member, {
+        type: 'call-rejected',
+        callId: call.id,
+        id: terminal.id,
+        name: terminal.name,
+      });
+    }
+    if (call.members.size <= 1 && call.invited.size === 0) this._endCall(call, 'rejected');
+    this._broadcastDirectory();
   }
 
-  _relay(peer, msg) {
-    if (!peer.roomId) {
-      this._send(peer, { type: 'error', code: 'not_in_room', message: '尚未加入房间' });
-      return;
-    }
-    const target = this.peers.get(msg.to);
-    if (!target || target.roomId !== peer.roomId) {
-      this._send(peer, { type: 'error', code: 'peer_not_found', message: '对端已离线' });
+  _cancel(terminal, msg) {
+    const call = this.calls.get(msg.callId || terminal.callId);
+    if (!call) return;
+    if (!call.members.has(terminal.id)) return;
+    this._endCall(call, 'cancelled');
+  }
+
+  _leaveCall(terminal, callId, reason) {
+    const call = callId ? this.calls.get(callId) : null;
+    if (!call) {
+      terminal.state = 'idle';
+      terminal.callId = null;
       return;
     }
 
-    const payload = { type: msg.type, from: peer.id };
+    // 被邀请者直接离开 = 拒绝
+    if (call.invited.has(terminal.id)) {
+      const invite = call.invited.get(terminal.id);
+      clearTimeout(invite.timer);
+      call.invited.delete(terminal.id);
+      terminal.state = 'idle';
+      terminal.callId = null;
+      for (const member of call.members.values()) {
+        this._send(member, {
+          type: 'call-rejected',
+          callId: call.id,
+          id: terminal.id,
+          name: terminal.name,
+        });
+      }
+      if (call.members.size <= 1 && call.invited.size === 0) this._endCall(call, 'rejected');
+      this._broadcastDirectory();
+      return;
+    }
+
+    if (!call.members.has(terminal.id)) return;
+
+    call.members.delete(terminal.id);
+    terminal.state = 'idle';
+    terminal.callId = null;
+
+    for (const member of call.members.values()) {
+      this._send(member, {
+        type: 'call-member-left',
+        callId: call.id,
+        id: terminal.id,
+        name: terminal.name,
+        reason,
+      });
+    }
+
+    if (call.members.size === 0) {
+      this._endCall(call, 'empty');
+      return;
+    }
+    if (call.members.size === 1) {
+      this._endCall(call, 'last_left');
+      return;
+    }
+    this._broadcastDirectory();
+  }
+
+  _endCall(call, reason) {
+    if (!this.calls.has(call.id)) return;
+
+    for (const invite of call.invited.values()) {
+      clearTimeout(invite.timer);
+      invite.terminal.state = 'idle';
+      invite.terminal.callId = null;
+      this._send(invite.terminal, { type: 'call-cancelled', callId: call.id, reason });
+    }
+    call.invited.clear();
+
+    for (const member of call.members.values()) {
+      member.state = 'idle';
+      member.callId = null;
+      this._send(member, { type: 'call-ended', callId: call.id, reason });
+    }
+
+    if (call.startedAt) {
+      const endedAt = Date.now();
+      this.history.unshift({
+        id: call.id,
+        startedAt: call.startedAt,
+        endedAt,
+        duration: Math.max(1, Math.round((endedAt - call.startedAt) / 1000)),
+        members: call.members.size,
+      });
+      if (this.history.length > 100) this.history.pop();
+    }
+
+    this.calls.delete(call.id);
+    this.logger.info('通话结束', { call: call.id, reason, members: call.members.size });
+    this._broadcastDirectory();
+  }
+
+  _ringTimeout(callId, terminalId) {
+    const call = this.calls.get(callId);
+    if (!call) return;
+    const invite = call.invited.get(terminalId);
+    if (!invite) return;
+
+    call.invited.delete(terminalId);
+    invite.terminal.state = 'idle';
+    invite.terminal.callId = null;
+    this._send(invite.terminal, { type: 'call-cancelled', callId, reason: 'timeout' });
+
+    for (const member of call.members.values()) {
+      this._send(member, {
+        type: 'call-timeout',
+        callId,
+        id: terminalId,
+        name: invite.terminal.name,
+      });
+    }
+    if (call.members.size <= 1 && call.invited.size === 0) this._endCall(call, 'timeout');
+    this._broadcastDirectory();
+  }
+
+  _relay(terminal, msg) {
+    if (!terminal.callId) {
+      this._sendError(terminal, 'not_in_call', '不在通话中');
+      return;
+    }
+    const target = this.terminals.get(msg.to);
+    if (!target || target.callId !== terminal.callId) {
+      this._sendError(terminal, 'peer_not_found', '对方已离开通话');
+      return;
+    }
+    const payload = { type: msg.type, from: terminal.id, callId: terminal.callId };
     if (msg.type === 'ice') payload.candidate = msg.candidate;
     else payload.sdp = msg.sdp;
-
     this._send(target, payload);
   }
 
-  _hangup(peer, msg) {
-    if (!peer.roomId) return;
-    const room = this.rooms.get(peer.roomId);
-    if (!room) return;
-    const target = msg.to ? this.peers.get(msg.to) : null;
-    for (const member of room.members.values()) {
-      if (member.id === peer.id) continue;
-      if (target && member.id !== target.id) continue;
-      this._send(member, { type: 'peer-hangup', id: peer.id, name: peer.name });
-    }
-    this.logger.info('设备挂断', { room: peer.roomId, device: peer.name });
-  }
-
-  _peerState(peer, msg) {
+  _state(terminal, msg) {
     const muted = msg.muted && typeof msg.muted === 'object' ? msg.muted : {};
-    peer.muted = { audio: Boolean(muted.audio), video: Boolean(muted.video) };
-    if (!peer.roomId) return;
-    const room = this.rooms.get(peer.roomId);
-    if (!room) return;
-    for (const member of room.members.values()) {
-      if (member.id === peer.id) continue;
-      this._send(member, { type: 'peer-state', id: peer.id, muted: peer.muted });
+    terminal.muted = { audio: Boolean(muted.audio), video: Boolean(muted.video) };
+    if (!terminal.callId) return;
+    const call = this.calls.get(terminal.callId);
+    if (!call) return;
+    for (const member of call.members.values()) {
+      if (member.id === terminal.id) continue;
+      this._send(member, { type: 'member-state', callId: call.id, id: terminal.id, muted: terminal.muted });
     }
   }
 
-  _peerStats(peer, msg) {
-    peer.stats = {
+  _stats(terminal, msg) {
+    terminal.stats = {
       rtt: Number(msg.rtt) || 0,
       bitrate: Number(msg.bitrate) || 0,
       width: Number(msg.width) || 0,
@@ -292,75 +529,40 @@ class SignalingService {
     };
   }
 
-  _leaveRoom(peer, reason) {
-    const room = this.rooms.get(peer.roomId);
-    peer.roomId = null;
-    if (!room) return;
-    room.members.delete(peer.id);
-    room.lastActiveAt = Date.now();
-
-    for (const member of room.members.values()) {
-      this._send(member, { type: 'peer-left', id: peer.id, name: peer.name, reason });
+  _requireRegistered(terminal) {
+    if (!terminal.registered) {
+      this._sendError(terminal, 'not_registered', '请先登录');
+      return false;
     }
-
-    this.logger.info('设备离开房间', {
-      room: room.id,
-      device: peer.name,
-      reason,
-      members: room.members.size,
-    });
-
-    if (room.members.size === 0) {
-      this._closeRoom(room);
-    } else if (room.members.size < 2 && room.callStartedAt) {
-      // 通话结束（对端离开/被踢），立即归档
-      this._archiveCall(room);
-      room.callStartedAt = 0;
-    }
+    return true;
   }
 
-  _archiveCall(room) {
-    if (!room.callStartedAt) return;
-    const endedAt = Date.now();
-    this.history.unshift({
-      room: room.id,
-      startedAt: room.callStartedAt,
-      endedAt,
-      duration: Math.max(1, Math.round((endedAt - room.callStartedAt) / 1000)),
-      members: room.totalJoins,
-    });
-    if (this.history.length > 100) this.history.pop();
-    room.callStartedAt = 0;
-  }
-
-  _closeRoom(room) {
-    this.rooms.delete(room.id);
-    this._archiveCall(room);
-  }
-
-  _send(peer, payload) {
+  _send(terminal, payload) {
     try {
-      peer.ws.send(payload);
+      terminal.ws.send(payload);
     } catch (err) {
-      // 连接已断开，忽略
+      // 连接已断开
     }
+  }
+
+  _sendError(terminal, code, message) {
+    this._send(terminal, { type: 'error', code, message });
   }
 
   _checkHeartbeats() {
     const now = Date.now();
-    const timeout = this.config.heartbeatTimeoutSeconds * 1000;
-    for (const peer of this.peers.values()) {
-      if (now - peer.lastSeen > timeout) {
-        this.logger.warn('心跳超时，断开连接', { device: peer.name || peer.id, room: peer.roomId });
+    for (const terminal of this.terminals.values()) {
+      if (now - terminal.lastSeen > this.config.heartbeatTimeoutSeconds * 1000) {
+        this.logger.warn('心跳超时', { id: terminal.id, name: terminal.name });
         try {
-          peer.ws.close(4000, 'heartbeat timeout');
+          terminal.ws.close(4000, 'heartbeat timeout');
         } catch (err) {
           // ignore
         }
-        this._disconnect(peer, 'heartbeat_timeout');
+        this._disconnect(terminal, 'heartbeat_timeout');
       } else {
         try {
-          peer.ws.ping();
+          terminal.ws.ping();
         } catch (err) {
           // ignore
         }
@@ -371,39 +573,40 @@ class SignalingService {
   _sample() {
     this.samples.push({
       t: Date.now(),
-      online: this.peers.size,
-      rooms: this.rooms.size,
+      online: this.onlineCount(),
+      rooms: this.activeCalls(),
       calls: this.activeCalls(),
     });
     if (this.samples.length > 180) this.samples.shift();
   }
 
-  activeCalls() {
+  onlineCount() {
     let count = 0;
-    for (const room of this.rooms.values()) {
-      if (room.members.size >= 2) count += 1;
-    }
+    for (const terminal of this.terminals.values()) if (terminal.registered) count += 1;
     return count;
   }
 
-  /* -------------------------------- 管理接口 -------------------------------- */
+  activeCalls() {
+    let count = 0;
+    for (const call of this.calls.values()) if (call.members.size >= 2) count += 1;
+    return count;
+  }
 
-  kick(roomId, peerId) {
-    const room = this.rooms.get(roomId);
-    if (!room) return { ok: false, error: 'room_not_found' };
-    const peer = room.members.get(peerId);
-    if (!peer) return { ok: false, error: 'peer_not_found' };
-    this._send(peer, { type: 'kicked', reason: '管理员已将设备移出房间' });
-    this.logger.warn('管理员踢出设备', { room: roomId, device: peer.name });
-    const left = peer.name;
-    // 先移除成员，确保日志与事件使用 kicked 作为原因
-    this._disconnect(peer, 'kicked');
+  /* ------------------------------ 管理接口 ------------------------------ */
+
+  kick(terminalId) {
+    const terminal = this.terminals.get(terminalId);
+    if (!terminal) return { ok: false, error: 'terminal_not_found' };
+    const name = terminal.name;
+    this._send(terminal, { type: 'kicked', reason: '管理员已将终端下线' });
+    this.logger.warn('管理员下线终端', { id: terminal.id, name });
+    this._disconnect(terminal, 'kicked');
     try {
-      peer.ws.close(4001, 'kicked by admin');
+      terminal.ws.close(4001, 'kicked by admin');
     } catch (err) {
       // ignore
     }
-    return { ok: true, name: left };
+    return { ok: true, name };
   }
 
   overview() {
@@ -414,71 +617,67 @@ class SignalingService {
       serverTime: now,
       startedAt: this.startedAt,
       uptimeSeconds: Math.round((now - this.startedAt) / 1000),
-      onlineDevices: this.peers.size,
-      activeRooms: this.rooms.size,
+      onlineTerminals: this.onlineCount(),
       activeCalls: this.activeCalls(),
       totalCalls: this.totalCalls,
       totalConnections: this.totalConnections,
-      peakOnline: Math.max(peak, this.peers.size),
-      maxRoomMembers: this.config.maxRoomMembers,
+      peakOnline: Math.max(peak, this.onlineCount()),
+      maxCallMembers: this.config.maxCallMembers,
       version: this.config.version,
       announcement: this.config.announcement,
     };
   }
 
-  listRooms() {
+  listTerminals() {
     const now = Date.now();
-    const rooms = [];
-    for (const room of this.rooms.values()) {
-      rooms.push({
-        id: room.id,
-        createdAt: room.createdAt,
-        durationSeconds: Math.round((now - room.createdAt) / 1000),
-        callDurationSeconds: room.callStartedAt ? Math.round((now - room.callStartedAt) / 1000) : 0,
-        inCall: room.members.size >= 2,
-        members: [...room.members.values()].map((peer) => ({
-          id: peer.id,
-          name: peer.name,
-          ip: peer.ip,
-          platform: peer.device.platform,
-          model: peer.device.model,
-          os: peer.device.os,
-          appVersion: peer.device.appVersion,
-          isTv: peer.device.isTv,
-          muted: peer.muted,
-          joinedAt: peer.joinedAt,
-          stats: peer.stats,
-        })),
-      });
-    }
-    return rooms.sort((a, b) => b.createdAt - a.createdAt);
+    return [...this.terminals.values()]
+      .filter((t) => t.registered)
+      .map((t) => ({
+        id: t.id,
+        name: t.name,
+        ip: t.ip,
+        platform: t.device.platform,
+        model: t.device.model,
+        os: t.device.os,
+        appVersion: t.device.appVersion,
+        isTv: t.device.isTv,
+        state: t.state,
+        callId: t.callId,
+        muted: t.muted,
+        onlineSeconds: Math.round((now - t.connectedAt) / 1000),
+        stats: t.stats,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  listDevices() {
+  listCalls() {
     const now = Date.now();
-    return [...this.peers.values()]
-      .map((peer) => ({
-        id: peer.id,
-        name: peer.name,
-        room: peer.roomId,
-        ip: peer.ip,
-        platform: peer.device.platform,
-        model: peer.device.model,
-        os: peer.device.os,
-        appVersion: peer.device.appVersion,
-        isTv: peer.device.isTv,
-        muted: peer.muted,
-        onlineSeconds: Math.round((now - peer.joinedAt) / 1000),
-        stats: peer.stats,
+    return [...this.calls.values()]
+      .map((call) => ({
+        id: call.id,
+        createdAt: call.createdAt,
+        inCall: call.members.size >= 2,
+        durationSeconds: call.startedAt ? Math.round((now - call.startedAt) / 1000) : 0,
+        members: [...call.members.values()].map((t) => ({
+          id: t.id,
+          name: t.name,
+          ip: t.ip,
+          platform: t.device.platform,
+          model: t.device.model,
+          isTv: t.device.isTv,
+          muted: t.muted,
+          stats: t.stats,
+        })),
+        invited: [...call.invited.values()].map((invite) => ({
+          id: invite.terminal.id,
+          name: invite.terminal.name,
+        })),
       }))
-      .sort((a, b) => (a.room === b.room ? 0 : a.room ? -1 : 1));
+      .sort((a, b) => b.createdAt - a.createdAt);
   }
 
   metrics() {
-    return {
-      samples: this.samples,
-      history: this.history.slice(0, 50),
-    };
+    return { samples: this.samples, history: this.history.slice(0, 50) };
   }
 }
 

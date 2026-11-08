@@ -52,17 +52,17 @@
     <main>
       <section class="stats">
         <article class="stat-card">
-          <p class="stat-label">在线设备</p>
+          <p class="stat-label">在线终端</p>
           <p class="stat-value" id="statOnline">0</p>
           <p class="stat-sub" id="statPeak">峰值 0</p>
         </article>
         <article class="stat-card">
-          <p class="stat-label">活跃房间</p>
+          <p class="stat-label">进行中通话</p>
           <p class="stat-value" id="statRooms">0</p>
-          <p class="stat-sub">含空闲房间</p>
+          <p class="stat-sub">含呼叫中</p>
         </article>
         <article class="stat-card">
-          <p class="stat-label">通话中</p>
+          <p class="stat-label">累计通话</p>
           <p class="stat-value accent" id="statCalls">0</p>
           <p class="stat-sub" id="statTotalCalls">累计 0 次</p>
         </article>
@@ -99,8 +99,8 @@
           </label>
           <div class="row">
             <label class="field grow">
-              <span>单房间最大人数</span>
-              <input id="maxMembers" type="number" min="2" max="8" step="1" />
+              <span>单次通话最大人数</span>
+              <input id="maxMembers" type="number" min="2" max="12" step="1" />
             </label>
             <button class="btn primary" id="saveSettings" type="button">保存</button>
           </div>
@@ -110,14 +110,14 @@
 
       <section class="card">
         <div class="card-head">
-          <h2>房间</h2>
+          <h2>通话</h2>
           <span class="muted small" id="roomsMeta">共 0 个</span>
         </div>
         <div class="table-wrap">
           <table>
             <thead>
               <tr>
-                <th>房间号</th>
+                <th>通话 ID</th>
                 <th>成员</th>
                 <th>状态</th>
                 <th>通话时长</th>
@@ -126,7 +126,7 @@
               </tr>
             </thead>
             <tbody id="roomsBody">
-              <tr><td colspan="6" class="empty">暂无房间</td></tr>
+              <tr><td colspan="6" class="empty">暂无通话</td></tr>
             </tbody>
           </table>
         </div>
@@ -135,16 +135,16 @@
       <section class="grid-2">
         <article class="card">
           <div class="card-head">
-            <h2>在线设备</h2>
+            <h2>在线终端</h2>
             <span class="muted small" id="devicesMeta">0 台</span>
           </div>
           <div class="table-wrap">
             <table>
               <thead>
-                <tr><th>设备</th><th>平台</th><th>房间</th><th>IP</th><th>在线</th></tr>
+                <tr><th>终端</th><th>平台</th><th>状态</th><th>IP</th><th>在线</th></tr>
               </thead>
               <tbody id="devicesBody">
-                <tr><td colspan="5" class="empty">暂无设备</td></tr>
+                <tr><td colspan="5" class="empty">暂无终端</td></tr>
               </tbody>
             </table>
           </div>

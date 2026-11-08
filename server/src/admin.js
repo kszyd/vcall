@@ -87,8 +87,7 @@ class AdminService {
         name: this.config.name,
         version: this.config.version,
         iceServers: this.config.iceServers,
-        maxRoomMembers: this.config.maxRoomMembers,
-        defaultRoom: this.config.defaultRoom,
+        maxCallMembers: this.config.maxCallMembers,
         allowWebClient: this.config.allowWebClient,
         announcement: this.config.announcement,
         serverTime: Date.now(),
@@ -128,12 +127,12 @@ class AdminService {
         return this.json(res, 200, { ok: true, overview: this.signaling.overview() });
       }
 
-      if (path === '/api/admin/rooms' && req.method === 'GET') {
-        return this.json(res, 200, { ok: true, rooms: this.signaling.listRooms() });
+      if (path === '/api/admin/calls' || path === '/api/admin/rooms') {
+        return this.json(res, 200, { ok: true, calls: this.signaling.listCalls() });
       }
 
-      if (path === '/api/admin/devices' && req.method === 'GET') {
-        return this.json(res, 200, { ok: true, devices: this.signaling.listDevices() });
+      if (path === '/api/admin/terminals' || path === '/api/admin/devices') {
+        return this.json(res, 200, { ok: true, terminals: this.signaling.listTerminals() });
       }
 
       if (path === '/api/admin/metrics' && req.method === 'GET') {
@@ -152,24 +151,24 @@ class AdminService {
           this.config.announcement = body.announcement.slice(0, 200);
           updated.announcement = this.config.announcement;
         }
-        if (body.maxRoomMembers !== undefined) {
-          const value = Number(body.maxRoomMembers);
-          if (!Number.isInteger(value) || value < 2 || value > 8) {
-            return this.json(res, 400, { ok: false, error: 'maxRoomMembers 需为 2-8 的整数' });
+        if (body.maxCallMembers !== undefined || body.maxRoomMembers !== undefined) {
+          const raw = body.maxCallMembers !== undefined ? body.maxCallMembers : body.maxRoomMembers;
+          const value = Number(raw);
+          if (!Number.isInteger(value) || value < 2 || value > 12) {
+            return this.json(res, 400, { ok: false, error: 'maxCallMembers 需为 2-12 的整数' });
           }
-          this.config.maxRoomMembers = value;
-          updated.maxRoomMembers = value;
+          this.config.maxCallMembers = value;
+          updated.maxCallMembers = value;
         }
         this.saveSettings(updated);
         this.logger.info('管理端更新设置', updated);
         return this.json(res, 200, { ok: true, settings: updated });
       }
 
-      const kickMatch = path.match(/^\/api\/admin\/rooms\/([^/]+)\/kick$/);
+      const kickMatch = path.match(/^\/api\/admin\/(?:terminals|devices)\/([^/]+)\/kick$/);
       if (kickMatch && req.method === 'POST') {
-        const roomId = decodeURIComponent(kickMatch[1]);
-        const peerId = typeof body.peerId === 'string' ? body.peerId : '';
-        const result = this.signaling.kick(roomId, peerId);
+        const terminalId = decodeURIComponent(kickMatch[1]);
+        const result = this.signaling.kick(terminalId);
         if (!result.ok) return this.json(res, 404, { ok: false, error: result.error });
         return this.json(res, 200, { ok: true, name: result.name });
       }

@@ -22,7 +22,7 @@ services:
       VCALL_ADMIN_USER: "admin"
       VCALL_ADMIN_PASSWORD: "vcall@2026"
       VCALL_ADMIN_SECRET: "please-change-this-secret"
-      VCALL_MAX_ROOM_MEMBERS: "2"
+      VCALL_MAX_CALL_MEMBERS: "6"
       VCALL_ANNOUNCEMENT: ""
       VCALL_LOG_LEVEL: "info"
       TZ: "Asia/Shanghai"

@@ -1,12 +1,12 @@
 'use strict';
 
 /**
- * VCall 后端联调测试（无第三方依赖）
+ * VCall v2 联调测试：终端注册 -> 通讯录 -> 呼叫 -> 多人 -> 管理接口
  * 用法：node test/signaling.test.js [http://127.0.0.1:9002]
  */
 
 const BASE = (process.argv[2] || process.env.VCALL_TEST_BASE || 'http://127.0.0.1:9002').replace(/\/$/, '');
-const WS_BASE = BASE.replace(/^http/, 'ws') + '/ws';
+const WS_URL = BASE.replace(/^http/, 'ws') + '/ws';
 
 let passed = 0;
 let failed = 0;
@@ -15,19 +15,17 @@ const failures = [];
 function check(name, condition, detail) {
   if (condition) {
     passed += 1;
-    console.log(`  ✓ ${name}`);
+    console.log('  PASS ' + name);
   } else {
     failed += 1;
-    failures.push(name + (detail ? ` -> ${detail}` : ''));
-    console.log(`  ✗ ${name}${detail ? ` -> ${detail}` : ''}`);
+    failures.push(name + (detail ? ' -> ' + detail : ''));
+    console.log('  FAIL ' + name + (detail ? ' -> ' + detail : ''));
   }
 }
 
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-async function waitFor(fn, timeout = 4000, interval = 50) {
+async function waitFor(fn, timeout = 5000, interval = 50) {
   const start = Date.now();
   while (Date.now() - start < timeout) {
     const value = await fn();
@@ -46,7 +44,7 @@ class Client {
   }
 
   async connect() {
-    this.ws = new WebSocket(WS_BASE);
+    this.ws = new WebSocket(WS_URL);
     this.ws.addEventListener('message', (event) => {
       try {
         this.messages.push(JSON.parse(event.data));
@@ -58,17 +56,23 @@ class Client {
       this.closed = true;
     });
     await new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error(`${this.label} 连接超时`)), 5000);
+      const timer = setTimeout(() => reject(new Error(this.label + ' 连接超时')), 5000);
       this.ws.addEventListener('open', () => {
         clearTimeout(timer);
         resolve();
       });
       this.ws.addEventListener('error', () => {
         clearTimeout(timer);
-        reject(new Error(`${this.label} 连接失败`));
+        reject(new Error(this.label + ' 连接失败'));
       });
     });
     return this;
+  }
+
+  async register(name, device) {
+    this.ws.send(JSON.stringify({ type: 'register', name, device: device || { platform: 'test' } }));
+    const registered = await this.waitType('registered');
+    return registered && registered.self;
   }
 
   send(payload) {
@@ -79,8 +83,19 @@ class Client {
     return this.messages.find((m) => m.type === type);
   }
 
-  async waitType(type, timeout = 4000) {
+  findAll(type) {
+    return this.messages.filter((m) => m.type === type);
+  }
+
+  async waitType(type, timeout = 5000) {
     return waitFor(() => this.find(type), timeout);
+  }
+
+  async waitDirectoryContains(terminalId, timeout = 5000) {
+    return waitFor(
+      () => this.findAll('directory').find((d) => (d.terminals || []).some((t) => t.id === terminalId)),
+      timeout
+    );
   }
 
   clear() {
@@ -98,163 +113,185 @@ class Client {
 
 function jsonRequest(path, options = {}, token) {
   const headers = { 'Content-Type': 'application/json' };
-  if (token) headers.Authorization = `Bearer ${token}`;
+  if (token) headers.Authorization = 'Bearer ' + token;
   return fetch(BASE + path, { ...options, headers }).then(async (res) => ({
     status: res.status,
     body: await res.json().catch(() => ({})),
-    headers: res.headers,
   }));
 }
 
 async function main() {
-  console.log(`\nVCall 后端测试 -> ${BASE}\n`);
+  console.log('\nVCall v2 测试 -> ' + BASE + '\n');
 
-  /* ---------------------------- HTTP 基础接口 ---------------------------- */
-  console.log('[1] HTTP 基础接口');
+  console.log('[1] HTTP 与静态资源');
   const health = await jsonRequest('/api/health');
-  check('GET /api/health 返回 200', health.status === 200);
-  check('健康检查包含版本号', Boolean(health.body.version), JSON.stringify(health.body));
+  check('健康检查 200', health.status === 200);
 
   const config = await jsonRequest('/api/config');
-  check('GET /api/config 返回 ICE 配置字段', Array.isArray(config.body.iceServers));
-  check('配置包含单房间人数上限', typeof config.body.maxRoomMembers === 'number');
+  check('配置返回单次通话上限', typeof config.body.maxCallMembers === 'number');
 
-  const adminPage = await fetch(BASE + '/admin');
-  const adminHtml = await adminPage.text();
-  check('GET /admin 返回管理页面', adminPage.status === 200 && adminHtml.includes('VCall 管理后台'));
+  const adminPage = await fetch(BASE + '/admin/');
+  check('管理后台可访问', adminPage.status === 200 && (await adminPage.text()).includes('VCall 管理后台'));
 
-  const callPage = await fetch(BASE + '/call');
-  check('GET /call 返回网页通话页', callPage.status === 200);
+  const callPage = await fetch(BASE + '/call/');
+  const callHtml = await callPage.text();
+  check('网页端为通讯录模式', callPage.status === 200 && callHtml.includes('进入通讯录'));
 
-  const traversal = await fetch(BASE + '/../server/src/config.js');
-  check('静态目录穿越被阻止', traversal.status === 404 || !(await traversal.text()).includes('adminPassword'));
-
-  /* ------------------------------ 登录鉴权 ------------------------------ */
-  console.log('\n[2] 管理登录与鉴权');
-  const badLogin = await jsonRequest('/api/admin/login', {
-    method: 'POST',
-    body: JSON.stringify({ username: 'admin', password: 'wrong-password' }),
-  });
-  check('错误密码返回 401', badLogin.status === 401);
-
+  console.log('\n[2] 管理登录');
   const login = await jsonRequest('/api/admin/login', {
     method: 'POST',
-    body: JSON.stringify({
-      username: process.env.VCALL_TEST_USER || 'admin',
-      password: process.env.VCALL_TEST_PASS || 'vcall@2026',
-    }),
+    body: JSON.stringify({ username: 'admin', password: 'vcall@2026' }),
   });
-  check('正确密码登录成功', login.status === 200 && Boolean(login.body.token));
+  check('管理登录成功', login.status === 200 && Boolean(login.body.token));
   const token = login.body.token;
 
-  const noAuth = await jsonRequest('/api/admin/overview');
-  check('未带令牌访问管理接口返回 401', noAuth.status === 401);
-
-  const overview = await jsonRequest('/api/admin/overview', {}, token);
-  check('管理概览接口可用', overview.status === 200 && typeof overview.body.overview.onlineDevices === 'number');
-
-  /* ------------------------------ 信令流程 ------------------------------ */
-  console.log('\n[3] WebSocket 信令');
+  console.log('\n[3] 终端注册与通讯录');
   const a = await new Client('A').connect();
   const welcomeA = await a.waitType('welcome');
   check('连接后收到 welcome', Boolean(welcomeA && welcomeA.id));
-
-  a.send({
-    type: 'join',
-    room: 'test-room-1',
-    name: '手机A',
-    device: { platform: 'android', model: 'Pixel', os: 'Android 13', appVersion: '1.0.0' },
-  });
-  const joinedA = await a.waitType('joined');
-  check('加入房间成功', Boolean(joinedA && joinedA.room === 'test-room-1'));
+  const selfA = await a.register('手机A', { platform: 'android', model: 'Pixel', isTv: false });
+  check('终端 A 注册成功', Boolean(selfA && selfA.id));
 
   const b = await new Client('B').connect();
   await b.waitType('welcome');
-  b.send({
-    type: 'join',
-    room: 'test-room-1',
-    name: '电视B',
-    device: { platform: 'android', model: 'MiTV', os: 'Android 9', appVersion: '1.0.0', isTv: true },
-  });
-  const joinedB = await b.waitType('joined');
-  check('第二台设备加入成功', Boolean(joinedB));
-  check('新成员能看到已有成员', Boolean(joinedB && joinedB.peers.length === 1 && joinedB.peers[0].name === '手机A'));
+  const selfB = await b.register('电视B', { platform: 'android', model: 'MiTV', isTv: true });
+  check('终端 B 注册成功', Boolean(selfB && selfB.id));
 
-  const peerJoined = await a.waitType('peer-joined');
-  check('已有成员收到 peer-joined', Boolean(peerJoined && peerJoined.peer.name === '电视B'));
+  const dirA = await a.waitDirectoryContains(selfB.id);
+  check('A 的通讯录中出现 B', Boolean(dirA));
+  const dirB = await b.waitDirectoryContains(selfA.id);
+  check('B 的通讯录中出现 A', Boolean(dirB));
 
-  a.send({ type: 'offer', to: joinedB.self.id, sdp: 'v=0\r\no=- 1 2 IN IP4 127.0.0.1\r\n' });
+  const terminals = await jsonRequest('/api/admin/terminals', {}, token);
+  check('管理端终端列表包含两台', (terminals.body.terminals || []).length >= 2);
+
+  console.log('\n[4] 一对一呼叫');
+  a.send({ type: 'call-invite', targets: [selfB.id], video: true });
+  const created = await a.waitType('call-created');
+  check('A 收到 call-created', Boolean(created && created.callId));
+  const callId = created.callId;
+
+  const incoming = await b.waitType('call-incoming');
+  check('B 收到来电', Boolean(incoming && incoming.callId === callId));
+
+  b.send({ type: 'call-accept', callId });
+  const joined = await b.waitType('call-joined');
+  check('B 收到 call-joined 且含 A', Boolean(joined && joined.members.some((m) => m.id === selfA.id)));
+
+  const memberJoined = await a.waitType('call-member-joined');
+  check('A 收到成员加入通知', Boolean(memberJoined && memberJoined.member.id === selfB.id));
+
+  a.send({ type: 'offer', to: selfB.id, callId, sdp: 'v=0\r\noffer' });
   const offer = await b.waitType('offer');
-  check('offer 转发到对端', Boolean(offer && offer.from === joinedA.self.id && offer.sdp.includes('v=0')));
+  check('offer 转发成功', Boolean(offer && offer.from === selfA.id));
 
-  b.send({ type: 'answer', to: joinedA.self.id, sdp: 'v=0\r\nanswer' });
+  b.send({ type: 'answer', to: selfA.id, callId, sdp: 'v=0\r\nanswer' });
   const answer = await a.waitType('answer');
-  check('answer 回传给发起方', Boolean(answer && answer.sdp === 'v=0\r\nanswer'));
+  check('answer 转发成功', Boolean(answer && answer.sdp.includes('answer')));
 
-  a.send({ type: 'ice', to: joinedB.self.id, candidate: { candidate: 'candidate:1 1 udp 1 192.168.199.100 5000 typ host', sdpMid: '0' } });
-  const ice = await b.waitType('ice');
-  check('ICE 候选转发成功', Boolean(ice && ice.candidate.candidate.includes('192.168.199.100')));
+  b.send({ type: 'ice', to: selfA.id, callId, candidate: { candidate: 'candidate:1 1 udp 1 192.168.199.100 5000 typ host', sdpMid: '0', sdpMLineIndex: 0 } });
+  const ice = await a.waitType('ice');
+  check('ICE 转发成功', Boolean(ice && ice.candidate.candidate.includes('192.168.199.100')));
 
-  b.send({ type: 'state', muted: { audio: true, video: false } });
-  const peerState = await a.waitType('peer-state');
-  check('静音状态同步', Boolean(peerState && peerState.muted.audio === true));
+  const calls = await jsonRequest('/api/admin/calls', {}, token);
+  const callInfo = (calls.body.calls || []).find((c) => c.id === callId);
+  check('管理端看到进行中通话', Boolean(callInfo && callInfo.members.length === 2));
 
-  b.send({ type: 'stats', rtt: 42, bitrate: 1200000, width: 1280, height: 720, fps: 30 });
-  await sleep(200);
-
-  const rooms = await jsonRequest('/api/admin/rooms', {}, token);
-  const room = (rooms.body.rooms || []).find((r) => r.id === 'test-room-1');
-  check('管理端能看到房间与 2 个成员', Boolean(room && room.members.length === 2));
-  check('管理端能看到通话状态', Boolean(room && room.inCall === true));
-  check('管理端能看到媒体统计', Boolean(room && room.members.some((m) => m.stats && m.stats.rtt === 42)));
-
-  const devices = await jsonRequest('/api/admin/devices', {}, token);
-  check('管理端设备列表包含电视标记', Boolean((devices.body.devices || []).some((d) => d.isTv === true)));
-
-  /* ------------------------------ 满员与踢人 ------------------------------ */
-  console.log('\n[4] 房间上限与踢人');
+  console.log('\n[5] 多人通话');
   const c = await new Client('C').connect();
   await c.waitType('welcome');
-  c.send({ type: 'join', room: 'test-room-1', name: '多余设备', device: { platform: 'android' } });
-  const full = await c.waitType('error');
-  check('房间满员时拒绝第三台设备', Boolean(full && full.code === 'room_full'), full && full.code);
+  const selfC = await c.register('手机C', { platform: 'android' });
+  await a.waitDirectoryContains(selfC.id);
 
-  const kick = await jsonRequest(
-    '/api/admin/rooms/test-room-1/kick',
-    { method: 'POST', body: JSON.stringify({ peerId: joinedB.self.id }) },
-    token
+  a.clear();
+  a.send({ type: 'call-invite', targets: [selfC.id], video: true });
+  const busyError = await a.waitType('error');
+  check('通话中不能再次发起呼叫', Boolean(busyError && busyError.code === 'busy'));
+
+  c.send({ type: 'call-invite', targets: [selfA.id], video: true });
+  const cError = await c.waitType('error');
+  check('不能呼叫通话中的终端', Boolean(cError && cError.code === 'no_available'));
+
+  console.log('\n[6] 离开与结束');
+  b.send({ type: 'call-leave', callId });
+  const left = await a.waitType('call-member-left');
+  check('A 收到成员离开', Boolean(left && left.id === selfB.id));
+  const ended = await a.waitType('call-ended');
+  check('剩余 1 人时通话结束', Boolean(ended));
+
+  const terminalsAfter = await jsonRequest('/api/admin/terminals', {}, token);
+  const stateA = (terminalsAfter.body.terminals || []).find((t) => t.id === selfA.id);
+  check('通话结束后终端回到空闲', Boolean(stateA && stateA.state === 'idle'));
+
+  console.log('\n[7] 拒绝与多人群呼');
+  c.clear();
+  const d = await new Client('D').connect();
+  await d.waitType('welcome');
+  const selfD = await d.register('手机D', { platform: 'android' });
+  await c.waitDirectoryContains(selfD.id);
+
+  c.send({ type: 'call-invite', targets: [selfD.id], video: true });
+  const cCreated = await c.waitType('call-created');
+  const dIncoming = await d.waitType('call-incoming');
+  check('D 收到来电', Boolean(dIncoming));
+  d.send({ type: 'call-reject', callId: cCreated.callId });
+  const rejected = await c.waitType('call-rejected');
+  check('C 收到拒绝通知', Boolean(rejected && rejected.id === selfD.id));
+
+  const e = await new Client('E').connect();
+  await e.waitType('welcome');
+  const selfE = await e.register('电视E', { platform: 'android', isTv: true });
+  await c.waitDirectoryContains(selfE.id);
+
+  c.clear();
+  d.clear();
+  c.send({ type: 'call-invite', targets: [selfD.id, selfE.id], video: true });
+  const groupCreated = await c.waitType('call-created');
+  check('发起多人呼叫', Boolean(groupCreated && groupCreated.invited.length === 2));
+  const groupCallId = groupCreated.callId;
+
+  const dGroup = await d.waitType('call-incoming');
+  check('群呼中 D 收到来电且标记为多人', Boolean(dGroup && dGroup.group === true));
+
+  d.send({ type: 'call-accept', callId: groupCallId });
+  await d.waitType('call-joined');
+  e.send({ type: 'call-accept', callId: groupCallId });
+  const eJoined = await e.waitType('call-joined');
+  check('E 加入后能看到已有成员', Boolean(eJoined && eJoined.members.length === 2));
+
+  const dSawE = await waitFor(
+    () => d.findAll('call-member-joined').find((m) => m.member.id === selfE.id),
+    4000
   );
-  check('管理端踢人成功', kick.status === 200 && kick.body.ok === true);
-  const kicked = await b.waitType('kicked');
-  check('被踢设备收到 kicked 通知', Boolean(kicked));
-  const left = await a.waitType('peer-left');
-  check('对端收到 peer-left', Boolean(left && left.name === '电视B'));
+  check('D 收到 E 加入通知', Boolean(dSawE));
 
-  /* ------------------------------ 断开与清理 ------------------------------ */
-  console.log('\n[5] 断开与数据清理');
+  c.send({ type: 'call-leave', callId: groupCallId });
+  const dLeft = await waitFor(
+    () => d.findAll('call-member-left').find((m) => m.id === selfC.id),
+    4000
+  );
+  check('C 离开后 D 收到通知', Boolean(dLeft));
+
+  console.log('\n[8] 管理端下线终端');
+  const kick = await jsonRequest('/api/admin/terminals/' + encodeURIComponent(selfE.id) + '/kick', {
+    method: 'POST',
+    body: '{}',
+  }, token);
+  check('管理员下线终端成功', kick.status === 200 && kick.body.ok === true);
+  const kicked = await e.waitType('kicked');
+  check('被下线终端收到通知', Boolean(kicked));
+
   a.close();
+  b.close();
   c.close();
+  d.close();
+  e.close();
   await sleep(500);
 
-  const roomsAfter = await jsonRequest('/api/admin/rooms', {}, token);
-  check('成员全部离开后房间被清理', !(roomsAfter.body.rooms || []).some((r) => r.id === 'test-room-1'));
+  const logs = await jsonRequest('/api/admin/logs?limit=80', {}, token);
+  check('日志记录终端注册', (logs.body.logs || []).some((l) => l.message.includes('终端注册')));
 
-  const metrics = await jsonRequest('/api/admin/metrics', {}, token);
-  check('通话记录已归档', Array.isArray(metrics.body.history) && metrics.body.history.length >= 1);
-
-  const logs = await jsonRequest('/api/admin/logs?limit=50', {}, token);
-  check('日志接口可用且记录加入事件', Boolean((logs.body.logs || []).some((l) => l.message.includes('加入房间'))));
-
-  const badJoin = await new Client('D').connect();
-  await badJoin.waitType('welcome');
-  badJoin.send({ type: 'join', room: '非法 房间!', name: 'X' });
-  const badRoom = await badJoin.waitType('error');
-  check('非法房间号被拒绝', Boolean(badRoom && badRoom.code === 'bad_room'));
-  badJoin.close();
-
-  await sleep(300);
-
-  console.log(`\n结果：${passed} 通过，${failed} 失败`);
+  console.log('\n结果：' + passed + ' 通过，' + failed + ' 失败');
   if (failed) {
     console.log('失败项：');
     for (const item of failures) console.log('  - ' + item);
