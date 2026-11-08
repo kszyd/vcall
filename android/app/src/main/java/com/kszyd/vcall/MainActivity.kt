@@ -395,7 +395,7 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
             "call-cancelled" -> {
                 hideIncoming()
                 val reason = message.optString("reason")
-                if (reason == "timeout") getString(R.string.call_timeout) else getString(R.string.call_cancelled))
+                toast(if (reason == "timeout") getString(R.string.call_timeout) else getString(R.string.call_cancelled))
                 if ((session?.peerCount ?: 0) == 0) exitCall()
             }
 
