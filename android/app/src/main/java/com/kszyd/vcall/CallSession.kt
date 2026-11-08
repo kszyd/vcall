@@ -238,7 +238,9 @@ class CallSession(
         val pc = peerConnection ?: return
         pc.setRemoteDescription(object : SimpleSdpObserver() {
             override fun onSetSuccess() = flushPendingCandidates()
-            override fun onSetFailure(error: String?) = onError?.invoke("设置应答失败：$error")
+            override fun onSetFailure(error: String?) {
+                onError?.invoke("设置应答失败：$error")
+            }
         }, SessionDescription(SessionDescription.Type.ANSWER, sdp))
     }
 

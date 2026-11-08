@@ -38,8 +38,20 @@ class StaticServer {
     if (req.method !== 'GET' && req.method !== 'HEAD') return false;
 
     let pathname = decodeURIComponent(url.pathname);
-    if (pathname === '/' || pathname === '/admin' || pathname === '/admin/') pathname = '/admin/index.html';
-    if (pathname === '/call' || pathname === '/call/') pathname = '/call/index.html';
+
+    // 目录形式访问需带斜杠，否则页面内相对资源路径会解析到站点根目录
+    if (pathname === '/admin' || pathname === '/call') {
+      res.writeHead(301, {
+        ...SECURITY_HEADERS,
+        Location: pathname + '/',
+        'Content-Length': 0,
+      });
+      res.end();
+      return true;
+    }
+
+    if (pathname === '/' || pathname === '/admin/') pathname = '/admin/index.html';
+    if (pathname === '/call/') pathname = '/call/index.html';
     if (pathname === '/favicon.ico') pathname = '/admin/favicon.svg';
 
     // 防止目录穿越
@@ -61,12 +73,13 @@ class StaticServer {
     const type = MIME[ext] || 'application/octet-stream';
     const etag = `W/"${stat.size}-${stat.mtimeMs}"`;
     const isHtml = ext === '.html';
+    const revalidate = isHtml || ext === '.css' || ext === '.js';
 
     res.writeHead(200, {
       ...SECURITY_HEADERS,
       'Content-Type': type,
       'Content-Length': stat.size,
-      'Cache-Control': isHtml ? 'no-cache' : 'public, max-age=3600',
+      'Cache-Control': revalidate ? 'no-cache' : 'public, max-age=86400',
       ETag: etag,
       'Content-Security-Policy': isHtml
         ? "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self' ws: wss:; media-src 'self' blob:; font-src 'self' data:"

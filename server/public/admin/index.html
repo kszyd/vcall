@@ -4,13 +4,13 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>VCall 管理后台</title>
-  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="app.css" />
+  <link rel="icon" href="/admin/favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/admin/app.css" />
 </head>
 <body>
   <!-- 登录 -->
   <div id="loginView" class="login-view">
-    <form id="loginForm" class="login-card" autocomplete="off">
+    <form id="loginForm" class="login-card" method="post" action="/admin/" autocomplete="off">
       <div class="brand">
         <span class="brand-logo">V</span>
         <div>
@@ -191,6 +191,6 @@
   </div>
 
   <div id="toast" class="toast hidden"></div>
-  <script src="app.js"></script>
+  <script src="/admin/app.js"></script>
 </body>
 </html>

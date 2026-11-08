@@ -269,12 +269,21 @@ main {
   flex-direction: column;
   gap: 16px;
   margin-top: 18px;
+  min-width: 0;
+}
+
+main > * {
+  min-width: 0;
 }
 
 .stats {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px;
+}
+
+.stats > * {
+  min-width: 0;
 }
 
 .stat-card {
@@ -316,6 +325,11 @@ main {
   display: grid;
   grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
   gap: 16px;
+  min-width: 0;
+}
+
+.grid-2 > * {
+  min-width: 0;
 }
 
 .card {
@@ -323,6 +337,7 @@ main {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 16px 18px;
+  min-width: 0;
 }
 
 .card-head {
@@ -377,6 +392,7 @@ main {
 
 .table-wrap {
   overflow-x: auto;
+  max-width: 100%;
   border-radius: 10px;
   border: 1px solid rgba(31, 45, 71, 0.7);
 }
