@@ -127,11 +127,11 @@ class AdminService {
         return this.json(res, 200, { ok: true, overview: this.signaling.overview() });
       }
 
-      if (path === '/api/admin/calls' || path === '/api/admin/rooms') {
+      if (path === '/api/admin/calls') {
         return this.json(res, 200, { ok: true, calls: this.signaling.listCalls() });
       }
 
-      if (path === '/api/admin/terminals' || path === '/api/admin/devices') {
+      if (path === '/api/admin/terminals') {
         return this.json(res, 200, { ok: true, terminals: this.signaling.listTerminals() });
       }
 

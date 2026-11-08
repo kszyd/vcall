@@ -1,6 +1,7 @@
 package com.kszyd.vcall
 
 import android.Manifest
+import android.app.AlertDialog
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.graphics.Color
@@ -9,12 +10,16 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.view.Gravity
 import android.view.LayoutInflater
+import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
 import android.view.WindowManager
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.GridLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -28,6 +33,7 @@ import org.json.JSONObject
 import org.webrtc.IceCandidate
 import org.webrtc.PeerConnection
 import org.webrtc.SurfaceViewRenderer
+import kotlin.math.abs
 
 /**
  * 仿微信通讯录的视频通话：
@@ -67,6 +73,15 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
 
     private var incomingCallId: String? = null
 
+    // 小窗拖动与大小画面切换
+    private var swapped = false
+    private var dragDownX = 0f
+    private var dragDownY = 0f
+    private var dragStartLeft = 0
+    private var dragStartTop = 0
+    private var dragging = false
+    private val touchSlop by lazy { ViewConfiguration.get(this).scaledTouchSlop }
+
     private lateinit var loginPanel: View
     private lateinit var directoryPanel: View
     private lateinit var callPanel: View
@@ -91,6 +106,8 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
     private lateinit var remoteGrid: GridLayout
     private lateinit var localRenderer: SurfaceViewRenderer
     private lateinit var localContainer: View
+    private lateinit var callTopBar: View
+    private lateinit var bottomBar: View
     private lateinit var callTitle: TextView
     private lateinit var callTimer: TextView
     private lateinit var netStatus: TextView
@@ -117,6 +134,13 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
                 callTimer.text = formatDuration(elapsed)
             }
             handler.postDelayed(this, 1000)
+        }
+    }
+
+    private val statsTicker = object : Runnable {
+        override fun run() {
+            if (inCall) session?.pollStats()
+            handler.postDelayed(this, 3000)
         }
     }
 
@@ -163,6 +187,8 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
         remoteGrid = findViewById(R.id.remoteGrid)
         localRenderer = findViewById(R.id.localRenderer)
         localContainer = findViewById(R.id.localContainer)
+        callTopBar = findViewById(R.id.callTopBar)
+        bottomBar = findViewById(R.id.bottomBar)
         callTitle = findViewById(R.id.callTitle)
         callTimer = findViewById(R.id.callTimer)
         netStatus = findViewById(R.id.netStatus)
@@ -195,6 +221,7 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
         joinButton.setOnClickListener { login() }
         logoutButton.setOnClickListener { logout() }
         callSelectedButton.setOnClickListener { inviteSelected() }
+        myName.setOnClickListener { editNickname() }
         searchInput.addTextChangedListenerSimple { renderTerminals() }
         micButton.setOnClickListener { toggleMic() }
         switchButton.setOnClickListener { switchCamera() }
@@ -202,6 +229,188 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
         hangupButton.setOnClickListener { hangup() }
         acceptButton.setOnClickListener { acceptCall() }
         rejectButton.setOnClickListener { rejectCall() }
+        setupDrag(localContainer)
+        setupDrag(remoteGrid)
+    }
+
+    /* ------------------------------ 小窗拖动与画面切换 ------------------------------ */
+
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+
+    private fun setupDrag(target: View) {
+        target.setOnTouchListener { view, event ->
+            val params = view.layoutParams as FrameLayout.LayoutParams
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    dragDownX = event.rawX
+                    dragDownY = event.rawY
+                    dragStartLeft = view.left
+                    dragStartTop = view.top
+                    dragging = false
+                    true
+                }
+
+                MotionEvent.ACTION_MOVE -> {
+                    // 全屏视图不参与拖动，只保留点击切回
+                    if (view.width > dp(200)) return@setOnTouchListener true
+                    val dx = (event.rawX - dragDownX).toInt()
+                    val dy = (event.rawY - dragDownY).toInt()
+                    if (!dragging && (abs(dx) > touchSlop || abs(dy) > touchSlop)) dragging = true
+                    if (dragging) {
+                        val parent = view.parent as View
+                        val maxLeft = (parent.width - view.width).coerceAtLeast(0)
+                        val maxTop = (parent.height - view.height - dp(100)).coerceAtLeast(0)
+                        params.gravity = Gravity.TOP or Gravity.START
+                        params.leftMargin = (dragStartLeft + dx).coerceIn(0, maxLeft)
+                        params.topMargin = (dragStartTop + dy).coerceIn(0, maxTop)
+                        view.layoutParams = params
+                    }
+                    true
+                }
+
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    if (!dragging) toggleMainView()
+                    true
+                }
+
+                else -> false
+            }
+        }
+    }
+
+    private fun toggleMainView() {
+        if ((session?.peerCount ?: 0) > 1) {
+            showHint("多人通话暂不支持切换画面")
+            return
+        }
+        swapped = !swapped
+        applyCallLayout()
+    }
+
+    private fun applyCallLayout() {
+        val localParams = localContainer.layoutParams as FrameLayout.LayoutParams
+        val gridParams = remoteGrid.layoutParams as FrameLayout.LayoutParams
+        val smallWidth = dp(108)
+        val smallHeight = dp(144)
+        val margin = dp(16)
+        val top = dp(78)
+
+        if (swapped) {
+            localParams.width = FrameLayout.LayoutParams.MATCH_PARENT
+            localParams.height = FrameLayout.LayoutParams.MATCH_PARENT
+            localParams.gravity = Gravity.TOP or Gravity.START
+            localParams.setMargins(0, 0, 0, 0)
+
+            gridParams.width = smallWidth
+            gridParams.height = smallHeight
+            gridParams.gravity = Gravity.TOP or Gravity.END
+            gridParams.setMargins(0, top, margin, 0)
+        } else {
+            gridParams.width = FrameLayout.LayoutParams.MATCH_PARENT
+            gridParams.height = FrameLayout.LayoutParams.MATCH_PARENT
+            gridParams.gravity = Gravity.TOP or Gravity.START
+            gridParams.setMargins(0, 0, 0, 0)
+
+            localParams.width = smallWidth
+            localParams.height = smallHeight
+            localParams.gravity = Gravity.TOP or Gravity.END
+            localParams.setMargins(0, top, margin, 0)
+        }
+
+        localContainer.layoutParams = localParams
+        remoteGrid.layoutParams = gridParams
+
+        if (swapped) localContainer.bringToFront() else remoteGrid.bringToFront()
+        bottomBar.bringToFront()
+        callTopBar.bringToFront()
+        hintOverlay.bringToFront()
+    }
+
+    /* ------------------------------ 昵称与备注 ------------------------------ */
+
+    private fun editNickname() {
+        val input = EditText(this).apply {
+            setText(selfName)
+            setSelection(text.length)
+            setSingleLine()
+        }
+        AlertDialog.Builder(this)
+            .setTitle("修改昵称")
+            .setView(input)
+            .setPositiveButton("保存") { _, _ ->
+                val newName = input.text.toString().trim()
+                if (newName.isEmpty()) {
+                    toast("昵称不能为空")
+                    return@setPositiveButton
+                }
+                selfName = newName
+                prefs.name = newName
+                myName.text = newName
+                myAvatar.text = initialOf(newName)
+                sendJson(buildRegisterMessage())
+                toast("昵称已更新")
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun aliasMap(): MutableMap<String, String> {
+        val map = mutableMapOf<String, String>()
+        try {
+            val json = JSONObject(prefs.aliases)
+            for (key in json.keys()) map[key] = json.optString(key)
+        } catch (ignored: Throwable) {
+        }
+        return map
+    }
+
+    private fun displayName(terminal: Terminal, aliases: Map<String, String>): String {
+        val alias = aliases[terminal.id]
+        return if (!alias.isNullOrBlank()) alias else terminal.name
+    }
+
+    private fun promptAlias(terminal: Terminal) {
+        val current = aliasMap()[terminal.id] ?: ""
+        val input = EditText(this).apply {
+            setText(current)
+            hint = "留空则清除备注"
+            setSelection(text.length)
+            setSingleLine()
+        }
+        AlertDialog.Builder(this)
+            .setTitle("备注「${terminal.name}」")
+            .setView(input)
+            .setPositiveButton("保存") { _, _ ->
+                val map = aliasMap()
+                val value = input.text.toString().trim()
+                if (value.isEmpty()) map.remove(terminal.id) else map[terminal.id] = value
+                prefs.aliases = JSONObject(map as Map<*, *>).toString()
+                renderTerminals()
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun showTerminalMenu(terminal: Terminal) {
+        val items = arrayOf("视频通话", "设置备注", "清除备注")
+        AlertDialog.Builder(this)
+            .setTitle(displayName(terminal, aliasMap()))
+            .setItems(items) { _, which ->
+                when (which) {
+                    0 -> {
+                        if (terminal.state == "idle") invite(listOf(terminal.id))
+                        else toast(getString(R.string.target_busy))
+                    }
+                    1 -> promptAlias(terminal)
+                    2 -> {
+                        val map = aliasMap()
+                        map.remove(terminal.id)
+                        prefs.aliases = JSONObject(map as Map<*, *>).toString()
+                        renderTerminals()
+                    }
+                }
+            }
+            .show()
     }
 
     private fun EditText.addTextChangedListenerSimple(onChange: () -> Unit) {
@@ -249,22 +458,23 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
     }
 
     override fun onSignalingOpen() {
-        runOnUiThread {
-            val device = JSONObject().apply {
-                put("platform", "android")
-                put("model", Build.MODEL ?: "")
-                put("brand", Build.BRAND ?: "")
-                put("os", "Android " + Build.VERSION.RELEASE)
-                put("appVersion", versionName())
-                put("isTv", isTv)
-            }
-            val message = JSONObject().apply {
-                put("type", "register")
-                put("name", selfName)
-                put("deviceId", prefs.deviceId)
-                put("device", device)
-            }
-            signaling?.send(message)
+        runOnUiThread { signaling?.send(buildRegisterMessage()) }
+    }
+
+    private fun buildRegisterMessage(): JSONObject {
+        val device = JSONObject().apply {
+            put("platform", "android")
+            put("model", Build.MODEL ?: "")
+            put("brand", Build.BRAND ?: "")
+            put("os", "Android " + Build.VERSION.RELEASE)
+            put("appVersion", versionName())
+            put("isTv", isTv)
+        }
+        return JSONObject().apply {
+            put("type", "register")
+            put("name", selfName)
+            put("deviceId", prefs.deviceId)
+            put("device", device)
         }
     }
 
@@ -310,7 +520,7 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
                 prefs.deviceId = selfId
                 myName.text = self?.optString("name") ?: selfName
                 myAvatar.text = initialOf(selfName)
-                myState.text = getString(R.string.my_id, selfId)
+                myState.text = getString(R.string.my_id, selfId) + " · 点击昵称可修改"
                 joinButton.isEnabled = true
                 joinButton.text = getString(R.string.join_room)
                 setupStatus.text = ""
@@ -476,8 +686,13 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
 
     private fun renderTerminals() {
         terminalList.removeAllViews()
+        val aliases = aliasMap()
         val keyword = searchInput.text.toString().trim().lowercase()
-        val filtered = terminals.filter { keyword.isEmpty() || it.name.lowercase().contains(keyword) }
+        val filtered = terminals.filter {
+            keyword.isEmpty() ||
+                displayName(it, aliases).lowercase().contains(keyword) ||
+                it.name.lowercase().contains(keyword)
+        }
         listHead.text = "${getString(R.string.online_terminals)} ${terminals.size}"
         emptyHint.visibility = if (filtered.isEmpty()) View.VISIBLE else View.GONE
         callSelectedButton.isEnabled = selected.isNotEmpty()
@@ -492,12 +707,14 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
             val subView = item.findViewById<TextView>(R.id.subText)
             val checkBox = item.findViewById<CheckBox>(R.id.selectBox)
 
-            avatar.text = initialOf(terminal.name)
-            nameView.text = terminal.name
+            val shown = displayName(terminal, aliases)
+            avatar.text = initialOf(shown)
+            nameView.text = shown
             tvTag.visibility = if (terminal.isTv) View.VISIBLE else View.GONE
             stateTag.visibility = if (terminal.state != "idle") View.VISIBLE else View.GONE
             stateTag.text = if (terminal.state == "busy") "通话中" else "响铃中"
-            subView.text = "${if (terminal.platform == "web") "网页" else "手机"} · ID ${terminal.id}"
+            val original = if (shown != terminal.name) "原名 ${terminal.name} · " else ""
+            subView.text = "$original${if (terminal.platform == "web") "网页" else "手机"} · ID ${terminal.id}"
 
             checkBox.isChecked = selected.contains(terminal.id)
             checkBox.setOnCheckedChangeListener { _, checked ->
@@ -516,6 +733,10 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
                 } else {
                     invite(listOf(terminal.id))
                 }
+            }
+            item.setOnLongClickListener {
+                showTerminalMenu(terminal)
+                true
             }
             terminalList.addView(item)
         }
@@ -610,7 +831,11 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
             callTimer.text = "00:00"
             handler.removeCallbacks(ticker)
             handler.post(ticker)
+            handler.removeCallbacks(statsTicker)
+            handler.postDelayed(statsTicker, 2000)
         }
+        swapped = false
+        applyCallLayout()
         updateMicUi()
         updateSpeakerUi()
         if (isTv) hangupButton.requestFocus()
@@ -626,7 +851,9 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
         callId = null
         inCall = false
         callStartAt = 0
+        swapped = false
         handler.removeCallbacks(ticker)
+        handler.removeCallbacks(statsTicker)
         session?.closeAll()
         updateMicUi()
         showDirectory()

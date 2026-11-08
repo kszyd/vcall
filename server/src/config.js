@@ -102,7 +102,6 @@ const config = {
   heartbeatTimeoutSeconds: int('VCALL_HEARTBEAT_TIMEOUT_SECONDS', 90),
 
   iceServers: resolveIceServers(),
-  defaultRoom: process.env.VCALL_DEFAULT_ROOM || '1001',
 
   dataDir: process.env.VCALL_DATA_DIR || path.resolve(__dirname, '..', 'data'),
   logToFile: bool('VCALL_LOG_TO_FILE', false),

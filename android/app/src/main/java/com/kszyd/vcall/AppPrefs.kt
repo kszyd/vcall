@@ -25,11 +25,17 @@ class AppPrefs(context: Context) {
         get() = prefs.getBoolean(KEY_SPEAKER, true)
         set(value) = prefs.edit().putBoolean(KEY_SPEAKER, value).apply()
 
+    /** 本地备注：JSON 字符串，形如 {"t1234":"小王"} */
+    var aliases: String
+        get() = prefs.getString(KEY_ALIASES, "{}") ?: "{}"
+        set(value) = prefs.edit().putString(KEY_ALIASES, value).apply()
+
     companion object {
         const val DEFAULT_SERVER = "192.168.199.100:9002"
         private const val KEY_SERVER = "server"
         private const val KEY_NAME = "name"
         private const val KEY_DEVICE_ID = "deviceId"
         private const val KEY_SPEAKER = "speaker"
+        private const val KEY_ALIASES = "aliases"
     }
 }

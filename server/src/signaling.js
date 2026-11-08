@@ -574,7 +574,6 @@ class SignalingService {
     this.samples.push({
       t: Date.now(),
       online: this.onlineCount(),
-      rooms: this.activeCalls(),
       calls: this.activeCalls(),
     });
     if (this.samples.length > 180) this.samples.shift();
