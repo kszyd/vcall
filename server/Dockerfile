@@ -10,7 +10,6 @@ ENV NODE_ENV=production \
 COPY package.json ./
 COPY src ./src
 COPY public ./public
-COPY test ./test
 
 RUN mkdir -p /data && chown -R node:node /app /data
 
