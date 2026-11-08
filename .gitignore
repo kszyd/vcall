@@ -1,0 +1,21 @@
+# 依赖与构建产物
+node_modules/
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+android/captures/
+*.iml
+*.apk
+*.aab
+
+# 运行时数据
+server/data/
+data/
+*.log
+
+# 本地配置
+.env
+.DS_Store
+Thumbs.db

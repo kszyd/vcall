@@ -1,0 +1,41 @@
+# 直接拉取 Docker Hub 镜像运行（无需源码与构建）
+services:
+  vcall:
+    image: kszyd/vcall-server:latest
+    container_name: vcall
+    restart: unless-stopped
+    ports:
+      - "9002:9002"
+    environment:
+      VCALL_PORT: "9002"
+      VCALL_DATA_DIR: "/data"
+      VCALL_ADMIN_USER: ${VCALL_ADMIN_USER:-admin}
+      VCALL_ADMIN_PASSWORD: ${VCALL_ADMIN_PASSWORD:-vcall@2026}
+      VCALL_ADMIN_SECRET: ${VCALL_ADMIN_SECRET:-please-change-this-secret}
+      VCALL_MAX_ROOM_MEMBERS: ${VCALL_MAX_ROOM_MEMBERS:-2}
+      VCALL_STUN_URLS: ${VCALL_STUN_URLS:-}
+      VCALL_TURN_URL: ${VCALL_TURN_URL:-}
+      VCALL_TURN_USER: ${VCALL_TURN_USER:-}
+      VCALL_TURN_PASS: ${VCALL_TURN_PASS:-}
+      VCALL_LOG_LEVEL: ${VCALL_LOG_LEVEL:-info}
+      TZ: ${TZ:-Asia/Shanghai}
+    volumes:
+      - vcall-data:/data
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:9002/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  vcall-data:

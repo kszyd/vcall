@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>VCall 网页通话</title>
+  <link rel="icon" href="/admin/favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="call.css" />
+</head>
+<body>
+  <div id="setup" class="setup">
+    <div class="setup-card">
+      <div class="logo-row">
+        <span class="logo">V</span>
+        <div>
+          <h1>VCall 网页通话</h1>
+          <p class="muted">浏览器端 · 用于电脑或电视快速加入房间</p>
+        </div>
+      </div>
+
+      <label class="field">
+        <span>服务器</span>
+        <input id="server" type="text" placeholder="192.168.199.100:9002" />
+      </label>
+
+      <div class="row">
+        <label class="field grow">
+          <span>昵称</span>
+          <input id="name" type="text" maxlength="24" placeholder="会议室电视" />
+        </label>
+        <label class="field grow">
+          <span>房间号</span>
+          <input id="room" type="text" maxlength="32" value="1001" />
+        </label>
+      </div>
+
+      <label class="field check">
+        <input id="joinAudio" type="checkbox" checked />
+        <span>加入时开启麦克风</span>
+      </label>
+
+      <button id="joinBtn" class="btn primary block" type="button">加入房间</button>
+      <p id="setupError" class="error"></p>
+      <p id="announcement" class="announce"></p>
+      <p class="hint muted">同一房间最多 2 台设备。手机 / 电视请安装 VCall APK 获得更佳效果。</p>
+    </div>
+  </div>
+
+  <div id="call" class="call hidden">
+    <video id="remoteVideo" autoplay playsinline></video>
+    <div id="remotePlaceholder" class="placeholder">
+      <div class="pulse"></div>
+      <p>等待对方加入房间 <b id="waitRoom"></b></p>
+      <p class="muted small" id="waitHint">在手机或电视上输入相同房间号即可接通</p>
+    </div>
+    <video id="localVideo" autoplay playsinline muted></video>
+
+    <div class="topbar">
+      <span class="badge" id="roomBadge">房间 1001</span>
+      <span class="badge" id="stateBadge">连接中…</span>
+      <span class="badge mono" id="statsBadge">--</span>
+    </div>
+
+    <div class="controls">
+      <button id="micBtn" class="ctrl" type="button" title="麦克风">🎤</button>
+      <button id="camBtn" class="ctrl" type="button" title="摄像头">📷</button>
+      <button id="speakerBtn" class="ctrl" type="button" title="扬声器">🔊</button>
+      <button id="hangupBtn" class="ctrl hangup" type="button" title="挂断">📵</button>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+  <script src="call.js"></script>
+</body>
+</html>

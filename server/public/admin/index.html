@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>VCall 管理后台</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="app.css" />
+</head>
+<body>
+  <!-- 登录 -->
+  <div id="loginView" class="login-view">
+    <form id="loginForm" class="login-card" autocomplete="off">
+      <div class="brand">
+        <span class="brand-logo">V</span>
+        <div>
+          <h1>VCall 管理后台</h1>
+          <p class="muted">视频通话信令服务 · 内网部署</p>
+        </div>
+      </div>
+      <label class="field">
+        <span>用户名</span>
+        <input id="username" name="username" type="text" value="admin" autocomplete="username" required />
+      </label>
+      <label class="field">
+        <span>密码</span>
+        <input id="password" name="password" type="password" autocomplete="current-password" required />
+      </label>
+      <button type="submit" class="btn primary block" id="loginBtn">登录</button>
+      <p id="loginError" class="error-text" role="alert"></p>
+      <p class="hint muted">默认账号 admin / vcall@2026，请在部署时通过环境变量修改。</p>
+    </form>
+  </div>
+
+  <!-- 主界面 -->
+  <div id="appView" class="app hidden">
+    <header class="topbar">
+      <div class="brand small">
+        <span class="brand-logo">V</span>
+        <div>
+          <h1>VCall 管理后台</h1>
+          <p class="muted" id="serverInfo">连接中…</p>
+        </div>
+      </div>
+      <div class="topbar-actions">
+        <span class="pill" id="connState">● 已连接</span>
+        <a class="btn ghost" href="/call" target="_blank" rel="noopener">网页通话</a>
+        <button class="btn ghost" id="logoutBtn" type="button">退出</button>
+      </div>
+    </header>
+
+    <main>
+      <section class="stats">
+        <article class="stat-card">
+          <p class="stat-label">在线设备</p>
+          <p class="stat-value" id="statOnline">0</p>
+          <p class="stat-sub" id="statPeak">峰值 0</p>
+        </article>
+        <article class="stat-card">
+          <p class="stat-label">活跃房间</p>
+          <p class="stat-value" id="statRooms">0</p>
+          <p class="stat-sub">含空闲房间</p>
+        </article>
+        <article class="stat-card">
+          <p class="stat-label">通话中</p>
+          <p class="stat-value accent" id="statCalls">0</p>
+          <p class="stat-sub" id="statTotalCalls">累计 0 次</p>
+        </article>
+        <article class="stat-card">
+          <p class="stat-label">运行时长</p>
+          <p class="stat-value" id="statUptime">0m</p>
+          <p class="stat-sub" id="statVersion">v1.0.0</p>
+        </article>
+      </section>
+
+      <section class="grid-2">
+        <article class="card">
+          <div class="card-head">
+            <h2>在线趋势</h2>
+            <span class="muted small">最近 10 分钟</span>
+          </div>
+          <div class="chart-wrap">
+            <svg id="chart" viewBox="0 0 600 160" preserveAspectRatio="none" aria-label="在线设备趋势图"></svg>
+            <div class="chart-legend">
+              <span><i class="dot blue"></i>在线设备</span>
+              <span><i class="dot cyan"></i>通话数</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="card-head">
+            <h2>公告与设置</h2>
+            <span class="muted small">立即生效</span>
+          </div>
+          <label class="field">
+            <span>客户端公告（显示在加入页）</span>
+            <input id="announcement" type="text" maxlength="200" placeholder="例如：今晚 22:00 维护" />
+          </label>
+          <div class="row">
+            <label class="field grow">
+              <span>单房间最大人数</span>
+              <input id="maxMembers" type="number" min="2" max="8" step="1" />
+            </label>
+            <button class="btn primary" id="saveSettings" type="button">保存</button>
+          </div>
+          <p class="hint muted" id="settingsHint">修改后写入容器数据卷，重启后仍保留。</p>
+        </article>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <h2>房间</h2>
+          <span class="muted small" id="roomsMeta">共 0 个</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>房间号</th>
+                <th>成员</th>
+                <th>状态</th>
+                <th>通话时长</th>
+                <th>媒体信息</th>
+                <th class="right">操作</th>
+              </tr>
+            </thead>
+            <tbody id="roomsBody">
+              <tr><td colspan="6" class="empty">暂无房间</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="grid-2">
+        <article class="card">
+          <div class="card-head">
+            <h2>在线设备</h2>
+            <span class="muted small" id="devicesMeta">0 台</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>设备</th><th>平台</th><th>房间</th><th>IP</th><th>在线</th></tr>
+              </thead>
+              <tbody id="devicesBody">
+                <tr><td colspan="5" class="empty">暂无设备</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+
+        <article class="card">
+          <div class="card-head">
+            <h2>通话记录</h2>
+            <span class="muted small">最近 20 条</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>房间号</th><th>开始时间</th><th>时长</th><th>接入次数</th></tr>
+              </thead>
+              <tbody id="historyBody">
+                <tr><td colspan="4" class="empty">暂无通话</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <h2>服务日志</h2>
+          <div class="log-actions">
+            <select id="logLevel" class="select">
+              <option value="">全部级别</option>
+              <option value="info">info</option>
+              <option value="warn">warn</option>
+              <option value="error">error</option>
+            </select>
+            <button class="btn ghost small" id="refreshLogs" type="button">刷新</button>
+          </div>
+        </div>
+        <div id="logs" class="logs" aria-live="polite"></div>
+      </section>
+    </main>
+
+    <footer class="foot muted small">
+      VCall · WebRTC 视频通话 · <span id="footVersion">v1.0.0</span>
+    </footer>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,77 @@
+name: Android APK
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "android/**"
+      - ".github/workflows/android.yml"
+  workflow_dispatch:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Grant gradlew permission
+        run: chmod +x gradlew
+
+      - name: Build APK (debug + release)
+        run: ./gradlew --no-daemon --stacktrace assembleDebug assembleRelease
+
+      - name: Collect APKs
+        run: |
+          mkdir -p out
+          VERSION=$(grep -oP 'versionName\s*=\s*"\K[^"]+' app/build.gradle.kts | head -1)
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          cp app/build/outputs/apk/debug/app-debug.apk "out/VCall-${VERSION}-debug.apk"
+          if [ -f app/build/outputs/apk/release/app-release.apk ]; then
+            cp app/build/outputs/apk/release/app-release.apk "out/VCall-${VERSION}.apk"
+          fi
+          ls -lh out
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VCall-APK
+          path: android/out/*.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish to GitHub Release
+        if: github.event_name != 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="v${VERSION}"
+          NOTES="VCall ${VERSION} 安卓客户端，支持 Android 6+ 手机与电视。下载 VCall-${VERSION}-debug.apk 直接安装，首次启动填写服务器地址与房间号。"
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --title "VCall ${VERSION}" --notes "$NOTES"
+          fi
+          gh release upload "$TAG" out/*.apk --clobber
+
+      - name: Attach to published release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.ref_name }}" out/*.apk --clobber
