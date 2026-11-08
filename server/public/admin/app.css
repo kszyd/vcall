@@ -300,6 +300,17 @@ main > * {
   letter-spacing: 0.4px;
 }
 
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.stack > * {
+  min-width: 0;
+}
+
 .stat-value {
   margin: 8px 0 4px;
   font-size: 30px;

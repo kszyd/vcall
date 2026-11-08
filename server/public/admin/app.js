@@ -406,24 +406,40 @@
     }
   }
 
-  async function saveSettings() {
-    const btn = $('saveSettings');
+  async function pushAnnouncement() {
+    const btn = $('pushAnnouncement');
     btn.disabled = true;
     try {
-      const data = await api('/api/admin/settings', {
+      const data = await api('/api/admin/announcement', {
         method: 'POST',
-        body: JSON.stringify({
-          announcement: $('announcement').value,
-          maxCallMembers: Number($('maxMembers').value),
-        }),
+        body: JSON.stringify({ text: $('announcement').value }),
       });
       const online = data.online || 0;
-      $('settingsHint').textContent =
-        (data.pushed ? '公告已推送到 ' + online + ' 台在线终端' : '设置已保存') + ' · ' + formatClock(Date.now());
-      toast(data.pushed ? '公告已推送到 ' + online + ' 台在线终端' : '设置已保存');
+      $('announcementHint').textContent =
+        (data.text ? '公告已推送到 ' : '公告已清除，并通知 ') + online + ' 台在线终端 · ' + formatClock(Date.now());
+      toast(data.text ? '公告已推送到 ' + online + ' 台在线终端' : '公告已清除');
     } catch (err) {
       toast(err.message);
-      $('settingsHint').textContent = '保存失败：' + err.message;
+      $('announcementHint').textContent = '推送失败：' + err.message;
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  async function saveLimits() {
+    const btn = $('saveLimits');
+    btn.disabled = true;
+    try {
+      const data = await api('/api/admin/limits', {
+        method: 'POST',
+        body: JSON.stringify({ maxCallMembers: Number($('maxMembers').value) }),
+      });
+      $('maxMembers').value = data.maxCallMembers;
+      $('limitsHint').textContent = '已保存：最多 ' + data.maxCallMembers + ' 人 · ' + formatClock(Date.now());
+      toast('通话人数上限已保存');
+    } catch (err) {
+      toast(err.message);
+      $('limitsHint').textContent = '保存失败：' + err.message;
     } finally {
       btn.disabled = false;
     }
@@ -433,7 +449,8 @@
 
   $('loginForm').addEventListener('submit', login);
   $('logoutBtn').addEventListener('click', () => logout(false));
-  $('saveSettings').addEventListener('click', saveSettings);
+  $('pushAnnouncement').addEventListener('click', pushAnnouncement);
+  $('saveLimits').addEventListener('click', saveLimits);
   $('refreshLogs').addEventListener('click', refresh);
   $('logLevel').addEventListener('change', refresh);
   document.addEventListener('visibilitychange', () => {

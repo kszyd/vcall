@@ -145,6 +145,42 @@ class AdminService {
         return this.json(res, 200, { ok: true, logs: this.logger.recent(limit, level) });
       }
 
+      if (path === '/api/admin/announcement' && req.method === 'POST') {
+        const text = typeof body.text === 'string' ? body.text.slice(0, 200) : '';
+        this.config.announcement = text;
+        const saved = this.saveSettings({ announcement: text });
+        if (!saved) {
+          return this.json(res, 500, {
+            ok: false,
+            error: '保存失败：数据目录不可写，请检查容器 ./data 挂载权限',
+          });
+        }
+        const online = this.signaling.broadcastAnnouncement(text);
+        this.logger.info('管理端更新公告', { length: text.length, online });
+        return this.json(res, 200, { ok: true, text, online });
+      }
+
+      if (path === '/api/admin/limits' && req.method === 'POST') {
+        const value = Number(body.maxCallMembers);
+        if (!Number.isInteger(value) || value < 2 || value > 12) {
+          return this.json(res, 400, { ok: false, error: '单次通话人数需为 2-12 的整数' });
+        }
+        this.config.maxCallMembers = value;
+        const saved = this.saveSettings({ maxCallMembers: value });
+        if (!saved) {
+          return this.json(res, 500, {
+            ok: false,
+            error: '保存失败：数据目录不可写，请检查容器 ./data 挂载权限',
+          });
+        }
+        this.logger.info('管理端更新通话设置', { maxCallMembers: value });
+        return this.json(res, 200, {
+          ok: true,
+          maxCallMembers: value,
+          online: this.signaling.onlineCount(),
+        });
+      }
+
       if (path === '/api/admin/settings' && req.method === 'POST') {
         const updated = {};
         if (typeof body.announcement === 'string') {
@@ -216,10 +252,16 @@ class AdminService {
       const fs = require('fs');
       const path = require('path');
       fs.mkdirSync(this.config.dataDir, { recursive: true });
-      fs.writeFileSync(
-        path.join(this.config.dataDir, 'settings.json'),
-        JSON.stringify(settings, null, 2)
-      );
+      const file = path.join(this.config.dataDir, 'settings.json');
+
+      // 合并写入，避免“公告”和“人数上限”互相覆盖
+      let current = {};
+      try {
+        if (fs.existsSync(file)) current = JSON.parse(fs.readFileSync(file, 'utf8'));
+      } catch (ignored) {
+        current = {};
+      }
+      fs.writeFileSync(file, JSON.stringify({ ...current, ...settings }, null, 2));
       return true;
     } catch (err) {
       this.logger.warn('保存设置失败', {

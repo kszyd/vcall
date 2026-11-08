@@ -288,23 +288,46 @@ async function main() {
   e.close();
   await sleep(500);
 
-  console.log('\n[9] 公告推送');
+  console.log('\n[9] 公告推送与通话设置');
   const f = await new Client('F').connect();
   await f.waitType('welcome');
   await f.register('手机F', { platform: 'android' });
-  const saveSettings = await jsonRequest('/api/admin/settings', {
+
+  const push = await jsonRequest('/api/admin/announcement', {
     method: 'POST',
-    body: JSON.stringify({ announcement: '测试公告-立即推送' }),
+    body: JSON.stringify({ text: '测试公告-立即推送' }),
   }, token);
-  check('保存设置成功', saveSettings.status === 200 && saveSettings.body.ok === true);
-  check('返回推送数量', typeof saveSettings.body.online === 'number');
+  check('公告推送接口成功', push.status === 200 && push.body.ok === true);
+  check('返回在线终端数量', typeof push.body.online === 'number');
   const announcement = await f.waitType('announcement');
   check('在线终端收到公告推送', Boolean(announcement && announcement.text === '测试公告-立即推送'));
+
+  const limits = await jsonRequest('/api/admin/limits', {
+    method: 'POST',
+    body: JSON.stringify({ maxCallMembers: 4 }),
+  }, token);
+  check('保存人数上限成功', limits.status === 200 && limits.body.maxCallMembers === 4);
+  const cfg = await jsonRequest('/api/config');
+  check('人数上限立即生效', cfg.body.maxCallMembers === 4);
+
+  const invalid = await jsonRequest('/api/admin/limits', {
+    method: 'POST',
+    body: JSON.stringify({ maxCallMembers: 99 }),
+  }, token);
+  check('非法人数被拒绝', invalid.status === 400);
+
+  const restored = await jsonRequest('/api/admin/limits', {
+    method: 'POST',
+    body: JSON.stringify({ maxCallMembers: 6 }),
+  }, token);
+  check('恢复人数上限', restored.status === 200 && restored.body.maxCallMembers === 6);
+
   f.close();
 
-  const logs = await jsonRequest('/api/admin/logs?limit=80', {}, token);
+  const logs = await jsonRequest('/api/admin/logs?limit=120', {}, token);
   check('日志记录终端注册', (logs.body.logs || []).some((l) => l.message.includes('终端注册')));
   check('日志记录公告推送', (logs.body.logs || []).some((l) => l.message.includes('已推送公告')));
+  check('日志记录通话设置', (logs.body.logs || []).some((l) => l.message.includes('更新通话设置')));
 
   console.log('\n结果：' + passed + ' 通过，' + failed + ' 失败');
   if (failed) {

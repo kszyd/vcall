@@ -88,24 +88,33 @@
           </div>
         </article>
 
-        <article class="card">
-          <div class="card-head">
-            <h2>公告与设置</h2>
-            <span class="muted small">推送到终端</span>
-          </div>
-          <label class="field">
-            <span>客户端公告（保存后推送到在线终端）</span>
-            <input id="announcement" type="text" maxlength="200" placeholder="例如：今晚 22:00 维护" />
-          </label>
-          <div class="row">
-            <label class="field grow">
-              <span>单次通话最大人数</span>
+        <div class="stack">
+          <article class="card">
+            <div class="card-head">
+              <h2>客户端公告</h2>
+              <span class="muted small">推送到在线终端</span>
+            </div>
+            <label class="field">
+              <span>公告内容（留空则清除公告）</span>
+              <input id="announcement" type="text" maxlength="200" placeholder="例如：今晚 22:00 维护" />
+            </label>
+            <button class="btn primary block" id="pushAnnouncement" type="button">推送到终端</button>
+            <p class="hint muted" id="announcementHint">点击后立即推送到所有在线终端，并写入数据目录。</p>
+          </article>
+
+          <article class="card">
+            <div class="card-head">
+              <h2>通话设置</h2>
+              <span class="muted small">保存后生效</span>
+            </div>
+            <label class="field">
+              <span>单次通话最大人数（2-12）</span>
               <input id="maxMembers" type="number" min="2" max="12" step="1" />
             </label>
-            <button class="btn primary" id="saveSettings" type="button">保存并推送</button>
-          </div>
-          <p class="hint muted" id="settingsHint">保存后会立即推送到所有在线终端，并写入数据目录。</p>
-        </article>
+            <button class="btn primary block" id="saveLimits" type="button">保存</button>
+            <p class="hint muted" id="limitsHint">保存后立即生效，影响之后发起的通话。</p>
+          </article>
+        </div>
       </section>
 
       <section class="card">
