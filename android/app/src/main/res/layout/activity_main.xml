@@ -6,32 +6,45 @@
     android:layout_height="match_parent"
     android:background="@color/bg">
 
-    <!-- ==================== 设置 / 加入页 ==================== -->
-    <androidx.constraintlayout.widget.ConstraintLayout
+    <!-- ==================== 加入页 ==================== -->
+    <ScrollView
         android:id="@+id/setupPanel"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:padding="16dp">
+        android:fillViewport="true">
 
         <LinearLayout
-            android:id="@+id/setupCard"
-            android:layout_width="0dp"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="@drawable/bg_card"
+            android:gravity="center_horizontal"
             android:orientation="vertical"
-            android:padding="22dp"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintWidth_max="460dp">
+            android:paddingStart="20dp"
+            android:paddingTop="40dp"
+            android:paddingEnd="20dp"
+            android:paddingBottom="32dp">
+
+            <FrameLayout
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:background="@drawable/bg_avatar">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:text="V"
+                    android:textColor="@color/white"
+                    android:textSize="30sp"
+                    android:textStyle="bold" />
+            </FrameLayout>
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
                 android:text="@string/setup_title"
                 android:textColor="@color/text"
-                android:textSize="26sp"
+                android:textSize="24sp"
                 android:textStyle="bold" />
 
             <TextView
@@ -42,96 +55,106 @@
                 android:textColor="@color/text_muted"
                 android:textSize="13sp" />
 
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:background="@drawable/bg_card"
+                android:orientation="vertical"
+                android:padding="20dp">
+
+                <TextView
+                    style="@style/VCallLabel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/label_server" />
+
+                <EditText
+                    android:id="@+id/serverInput"
+                    style="@style/VCallInput"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:hint="@string/hint_server"
+                    android:importantForAutofill="no"
+                    android:inputType="textUri" />
+
+                <TextView
+                    style="@style/VCallLabel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:text="@string/label_name" />
+
+                <EditText
+                    android:id="@+id/nameInput"
+                    style="@style/VCallInput"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:hint="@string/hint_name"
+                    android:importantForAutofill="no"
+                    android:inputType="text"
+                    android:maxLength="24" />
+
+                <TextView
+                    style="@style/VCallLabel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:text="@string/label_room" />
+
+                <EditText
+                    android:id="@+id/roomInput"
+                    style="@style/VCallInput"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:hint="@string/hint_room"
+                    android:importantForAutofill="no"
+                    android:inputType="text"
+                    android:maxLength="32" />
+
+                <Button
+                    android:id="@+id/joinButton"
+                    style="@style/VCallButton.Primary"
+                    android:layout_width="match_parent"
+                    android:layout_height="54dp"
+                    android:layout_marginTop="22dp"
+                    android:text="@string/join_room"
+                    android:textSize="16sp" />
+
+                <TextView
+                    android:id="@+id/setupStatus"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:gravity="center"
+                    android:textColor="@color/text_muted"
+                    android:textSize="13sp" />
+
+                <TextView
+                    android:id="@+id/announcementText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:gravity="center"
+                    android:textColor="#FFFCD34D"
+                    android:textSize="12sp"
+                    android:visibility="gone" />
+            </LinearLayout>
+
             <TextView
-                style="@style/VCallLabel"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="22dp"
-                android:text="@string/label_server" />
-
-            <EditText
-                android:id="@+id/serverInput"
-                style="@style/VCallInput"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:hint="@string/hint_server"
-                android:importantForAutofill="no"
-                android:inputType="textUri" />
-
-            <TextView
-                style="@style/VCallLabel"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
-                android:text="@string/label_name" />
-
-            <EditText
-                android:id="@+id/nameInput"
-                style="@style/VCallInput"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:hint="@string/hint_name"
-                android:importantForAutofill="no"
-                android:inputType="text"
-                android:maxLength="24" />
-
-            <TextView
-                style="@style/VCallLabel"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
-                android:text="@string/label_room" />
-
-            <EditText
-                android:id="@+id/roomInput"
-                style="@style/VCallInput"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:hint="@string/hint_room"
-                android:importantForAutofill="no"
-                android:inputType="text"
-                android:maxLength="32" />
-
-            <Button
-                android:id="@+id/joinButton"
-                style="@style/VCallButton.Primary"
-                android:layout_width="match_parent"
-                android:layout_height="54dp"
-                android:layout_marginTop="22dp"
-                android:text="@string/join_room"
-                android:textSize="16sp" />
-
-            <TextView
-                android:id="@+id/setupStatus"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
+                android:layout_marginTop="18dp"
                 android:gravity="center"
-                android:textColor="@color/text_muted"
-                android:textSize="13sp" />
-
-            <TextView
-                android:id="@+id/announcementText"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:textColor="#FFFCD34D"
-                android:textSize="12sp"
-                android:visibility="gone" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
                 android:lineSpacingExtra="3dp"
                 android:text="@string/setup_hint"
                 android:textColor="@color/text_muted"
                 android:textSize="12sp" />
         </LinearLayout>
-    </androidx.constraintlayout.widget.ConstraintLayout>
+    </ScrollView>
 
     <!-- ==================== 通话页 ==================== -->
     <FrameLayout
@@ -146,112 +169,313 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent" />
 
+        <!-- 顶部信息 -->
+        <LinearLayout
+            android:id="@+id/topBar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top"
+            android:background="@drawable/bg_top_bar"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="20dp"
+            android:paddingTop="18dp"
+            android:paddingEnd="20dp"
+            android:paddingBottom="24dp">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/peerName"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/call_title"
+                    android:textColor="@color/white"
+                    android:textSize="@dimen/call_title_size"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/callTimer"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="00:00"
+                    android:textColor="#CCFFFFFF"
+                    android:textSize="@dimen/call_sub_size" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/netStatus"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/network_checking"
+                android:textColor="#B3FFFFFF"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <!-- 本地画面小窗（微信右上角） -->
+        <FrameLayout
+            android:id="@+id/localContainer"
+            android:layout_width="@dimen/local_width"
+            android:layout_height="@dimen/local_height"
+            android:layout_gravity="top|end"
+            android:layout_marginTop="80dp"
+            android:layout_marginEnd="16dp"
+            android:background="@drawable/bg_local_frame"
+            android:clipToOutline="true"
+            android:elevation="8dp">
+
+            <org.webrtc.SurfaceViewRenderer
+                android:id="@+id/localRenderer"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+        </FrameLayout>
+
+        <!-- 底部控制栏 -->
+        <LinearLayout
+            android:id="@+id/bottomBar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom"
+            android:background="@drawable/bg_bottom_bar"
+            android:gravity="center"
+            android:orientation="horizontal"
+            android:paddingStart="8dp"
+            android:paddingTop="28dp"
+            android:paddingEnd="8dp"
+            android:paddingBottom="16dp">
+
+            <LinearLayout
+                android:id="@+id/micButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:background="@drawable/bg_ctrl_focus"
+                android:clickable="true"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:gravity="center"
+                android:orientation="vertical"
+                android:paddingTop="8dp"
+                android:paddingBottom="6dp">
+
+                <ImageView
+                    android:id="@+id/micIcon"
+                    android:layout_width="@dimen/ctrl_icon_size"
+                    android:layout_height="@dimen/ctrl_icon_size"
+                    android:background="@drawable/bg_circle_dark"
+                    android:contentDescription="@string/mic_on"
+                    android:padding="@dimen/ctrl_icon_padding"
+                    android:src="@drawable/ic_mic"
+                    android:tint="@color/white" />
+
+                <TextView
+                    android:id="@+id/micLabel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="@string/mic_on"
+                    android:textColor="@color/white"
+                    android:textSize="@dimen/ctrl_label_size" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/switchButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:background="@drawable/bg_ctrl_focus"
+                android:clickable="true"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:gravity="center"
+                android:orientation="vertical"
+                android:paddingTop="8dp"
+                android:paddingBottom="6dp">
+
+                <ImageView
+                    android:id="@+id/switchIcon"
+                    android:layout_width="@dimen/ctrl_icon_size"
+                    android:layout_height="@dimen/ctrl_icon_size"
+                    android:background="@drawable/bg_circle_dark"
+                    android:contentDescription="@string/switch_camera"
+                    android:padding="@dimen/ctrl_icon_padding"
+                    android:src="@drawable/ic_flip_camera"
+                    android:tint="@color/white" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="@string/switch_camera"
+                    android:textColor="@color/white"
+                    android:textSize="@dimen/ctrl_label_size" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/hangupButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:background="@drawable/bg_ctrl_focus"
+                android:clickable="true"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:gravity="center"
+                android:orientation="vertical"
+                android:paddingTop="2dp"
+                android:paddingBottom="6dp">
+
+                <ImageView
+                    android:id="@+id/hangupIcon"
+                    android:layout_width="@dimen/hangup_icon_size"
+                    android:layout_height="@dimen/hangup_icon_size"
+                    android:background="@drawable/bg_circle_danger"
+                    android:contentDescription="@string/hangup"
+                    android:padding="18dp"
+                    android:src="@drawable/ic_call_end"
+                    android:tint="@color/white" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="@string/hangup"
+                    android:textColor="@color/white"
+                    android:textSize="@dimen/ctrl_label_size" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/speakerButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:background="@drawable/bg_ctrl_focus"
+                android:clickable="true"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:gravity="center"
+                android:orientation="vertical"
+                android:paddingTop="8dp"
+                android:paddingBottom="6dp">
+
+                <ImageView
+                    android:id="@+id/speakerIcon"
+                    android:layout_width="@dimen/ctrl_icon_size"
+                    android:layout_height="@dimen/ctrl_icon_size"
+                    android:background="@drawable/bg_circle_dark"
+                    android:contentDescription="@string/speaker"
+                    android:padding="@dimen/ctrl_icon_padding"
+                    android:src="@drawable/ic_volume_up"
+                    android:tint="@color/white" />
+
+                <TextView
+                    android:id="@+id/speakerLabel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="@string/speaker"
+                    android:textColor="@color/white"
+                    android:textSize="@dimen/ctrl_label_size" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- 呼叫等待层（覆盖式，仿微信呼叫页） -->
         <LinearLayout
             android:id="@+id/waitingOverlay"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
+            android:background="#F205080F"
             android:gravity="center"
             android:orientation="vertical"
             android:padding="24dp">
 
-            <ProgressBar
-                android:layout_width="42dp"
-                android:layout_height="42dp"
-                android:indeterminateTint="@color/accent"
-                android:indeterminateTintMode="src_in" />
+            <FrameLayout
+                android:layout_width="@dimen/avatar_size"
+                android:layout_height="@dimen/avatar_size"
+                android:background="@drawable/bg_avatar">
+
+                <TextView
+                    android:id="@+id/avatarText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:text="V"
+                    android:textColor="@color/white"
+                    android:textSize="@dimen/avatar_text_size"
+                    android:textStyle="bold" />
+            </FrameLayout>
 
             <TextView
-                android:id="@+id/waitingTitle"
+                android:id="@+id/waitingName"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="18dp"
-                android:text="@string/waiting_title"
-                android:textColor="@color/text"
-                android:textSize="20sp" />
+                android:layout_marginTop="20dp"
+                android:text="@string/call_title"
+                android:textColor="@color/white"
+                android:textSize="20sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/waitingHint"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="@string/waiting_peer"
+                android:textColor="#B3FFFFFF"
+                android:textSize="14sp" />
 
             <TextView
                 android:id="@+id/waitingRoom"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:textColor="@color/text_muted"
-                android:textSize="15sp" />
+                android:layout_marginTop="6dp"
+                android:textColor="#80FFFFFF"
+                android:textSize="12sp" />
 
-            <TextView
+            <LinearLayout
+                android:id="@+id/cancelButton"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:text="@string/waiting_hint"
-                android:textColor="@color/text_muted"
-                android:textSize="13sp" />
+                android:layout_marginTop="40dp"
+                android:background="@drawable/bg_ctrl_focus"
+                android:clickable="true"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:gravity="center"
+                android:orientation="vertical"
+                android:padding="8dp">
+
+                <ImageView
+                    android:id="@+id/cancelIcon"
+                    android:layout_width="@dimen/hangup_icon_size"
+                    android:layout_height="@dimen/hangup_icon_size"
+                    android:background="@drawable/bg_circle_danger"
+                    android:contentDescription="@string/cancel"
+                    android:padding="18dp"
+                    android:src="@drawable/ic_call_end"
+                    android:tint="@color/white" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="@string/cancel"
+                    android:textColor="@color/white"
+                    android:textSize="@dimen/ctrl_label_size" />
+            </LinearLayout>
         </LinearLayout>
-
-        <org.webrtc.SurfaceViewRenderer
-            android:id="@+id/localRenderer"
-            android:layout_width="132dp"
-            android:layout_height="176dp"
-            android:layout_gravity="top|end"
-            android:layout_marginTop="16dp"
-            android:layout_marginEnd="16dp"
-            android:background="@drawable/bg_local"
-            android:elevation="6dp" />
-
-        <LinearLayout
-            android:id="@+id/topBar"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_gravity="top|start"
-            android:layout_marginStart="16dp"
-            android:layout_marginTop="16dp"
-            android:layout_marginEnd="170dp"
-            android:orientation="horizontal">
-
-            <TextView
-                android:id="@+id/roomBadge"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:background="@drawable/bg_badge"
-                android:paddingStart="12dp"
-                android:paddingTop="6dp"
-                android:paddingEnd="12dp"
-                android:paddingBottom="6dp"
-                android:textColor="@color/text"
-                android:textSize="12sp" />
-
-            <TextView
-                android:id="@+id/stateBadge"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:background="@drawable/bg_badge"
-                android:paddingStart="12dp"
-                android:paddingTop="6dp"
-                android:paddingEnd="12dp"
-                android:paddingBottom="6dp"
-                android:text="@string/state_connecting"
-                android:textColor="@color/success"
-                android:textSize="12sp" />
-
-            <TextView
-                android:id="@+id/statsBadge"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:background="@drawable/bg_badge"
-                android:paddingStart="12dp"
-                android:paddingTop="6dp"
-                android:paddingEnd="12dp"
-                android:paddingBottom="6dp"
-                android:text="--"
-                android:textColor="@color/accent_cyan"
-                android:textSize="12sp" /></LinearLayout>
 
         <TextView
             android:id="@+id/hintOverlay"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_gravity="bottom|center_horizontal"
-            android:layout_marginBottom="110dp"
+            android:layout_gravity="center_horizontal|bottom"
+            android:layout_marginBottom="150dp"
             android:background="@drawable/bg_badge"
             android:paddingStart="16dp"
             android:paddingTop="8dp"
@@ -260,68 +484,5 @@
             android:textColor="@color/text"
             android:textSize="13sp"
             android:visibility="gone" />
-
-        <LinearLayout
-            android:id="@+id/controls"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_gravity="bottom"
-            android:background="#CC05080F"
-            android:gravity="center"
-            android:orientation="horizontal"
-            android:paddingStart="8dp"
-            android:paddingTop="10dp"
-            android:paddingEnd="8dp"
-            android:paddingBottom="14dp">
-
-            <Button
-                android:id="@+id/micButton"
-                style="@style/VCallButton"
-                android:layout_width="0dp"
-                android:layout_height="50dp"
-                android:layout_weight="1"
-                android:layout_marginEnd="6dp"
-                android:text="@string/mic_on"
-                android:textSize="13sp" />
-
-            <Button
-                android:id="@+id/camButton"
-                style="@style/VCallButton"
-                android:layout_width="0dp"
-                android:layout_height="50dp"
-                android:layout_weight="1"
-                android:layout_marginEnd="6dp"
-                android:text="@string/cam_on"
-                android:textSize="13sp" />
-
-            <Button
-                android:id="@+id/switchButton"
-                style="@style/VCallButton"
-                android:layout_width="0dp"
-                android:layout_height="50dp"
-                android:layout_weight="1"
-                android:layout_marginEnd="6dp"
-                android:text="@string/switch_camera"
-                android:textSize="13sp" />
-
-            <Button
-                android:id="@+id/speakerButton"
-                style="@style/VCallButton"
-                android:layout_width="0dp"
-                android:layout_height="50dp"
-                android:layout_weight="1"
-                android:layout_marginEnd="6dp"
-                android:text="@string/speaker"
-                android:textSize="13sp" />
-
-            <Button
-                android:id="@+id/hangupButton"
-                style="@style/VCallButton.Danger"
-                android:layout_width="0dp"
-                android:layout_height="50dp"
-                android:layout_weight="1"
-                android:text="@string/hangup"
-                android:textSize="13sp" />
-        </LinearLayout>
     </FrameLayout>
 </FrameLayout>

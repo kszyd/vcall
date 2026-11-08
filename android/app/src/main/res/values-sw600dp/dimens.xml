@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="ctrl_icon_size">76dp</dimen>
+    <dimen name="ctrl_icon_padding">20dp</dimen>
+    <dimen name="ctrl_label_size">15sp</dimen>
+    <dimen name="hangup_icon_size">84dp</dimen>
+    <dimen name="avatar_size">120dp</dimen>
+    <dimen name="avatar_text_size">48sp</dimen>
+    <dimen name="local_width">150dp</dimen>
+    <dimen name="local_height">200dp</dimen>
+    <dimen name="call_title_size">21sp</dimen>
+    <dimen name="call_sub_size">16sp</dimen>
+</resources>

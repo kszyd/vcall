@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">VCall 视频通话</string>
-    <string name="setup_title">VCall 视频通话</string>
-    <string name="setup_subtitle">手机 / 电视 · 内网 WebRTC 通话</string>
+    <string name="setup_title">视频通话</string>
+    <string name="setup_subtitle">VCall · 内网高清通话</string>
     <string name="label_server">服务器地址</string>
     <string name="hint_server">192.168.199.100:9002</string>
     <string name="label_name">本机昵称</string>
@@ -11,21 +11,33 @@
     <string name="hint_room">1001</string>
     <string name="join_room">加入房间</string>
     <string name="joining">正在连接…</string>
-    <string name="setup_hint">两端输入相同房间号即可通话。遥控器可用方向键选择、确认键操作。</string>
-    <string name="waiting_title">等待对方加入房间</string>
-    <string name="waiting_hint">在另一台手机或电视上输入相同房间号</string>
+    <string name="setup_hint">两端输入相同房间号即可通话。遥控器方向键移动焦点，确认键操作。</string>
+
+    <string name="call_title">视频通话</string>
+    <string name="waiting_title">正在等待对方加入…</string>
+    <string name="waiting_hint">在另一台手机或电视输入相同房间号</string>
+    <string name="waiting_peer">正在等待对方加入…</string>
+    <string name="connecting_peer">正在接通…</string>
+    <string name="waiting_room">房间号 %s</string>
+    <string name="cancel">取消</string>
     <string name="state_connecting">连接中…</string>
     <string name="state_waiting">等待对方</string>
     <string name="state_in_call">通话中</string>
     <string name="state_disconnected">连接已断开</string>
-    <string name="mic_on">麦克风</string>
+
+    <string name="mic_on">静音</string>
     <string name="mic_off">已静音</string>
     <string name="cam_on">摄像头</string>
     <string name="cam_off">已关闭</string>
     <string name="switch_camera">翻转</string>
-    <string name="speaker">扬声器</string>
+    <string name="speaker">免提</string>
     <string name="earpiece">听筒</string>
     <string name="hangup">挂断</string>
+    <string name="peer_left">对方已挂断</string>
+    <string name="network_good">网络良好</string>
+    <string name="network_bad">网络不佳</string>
+    <string name="network_checking">连接中</string>
+
     <string name="permission_needed">需要摄像头与麦克风权限才能通话</string>
     <string name="permission_settings">请在系统设置中授予权限后重试</string>
     <string name="room_invalid">房间号只能包含字母、数字、下划线和短横线（1-32 位）</string>

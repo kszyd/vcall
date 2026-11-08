@@ -114,7 +114,22 @@ docker compose -f docker-compose.hub.yml up -d
 
 数据卷保留，配置不受影响。
 
-## 10. 排障
+## 10. Kubernetes（YAML）
+
+清单文件：`deploy/k8s.yaml`，包含 Namespace、Secret、ConfigMap、PVC、Deployment、Service。
+
+```bash
+kubectl apply -f deploy/k8s.yaml
+kubectl -n vcall get pods,svc
+kubectl -n vcall rollout status deploy/vcall
+```
+
+- Deployment 使用 `hostPort: 9002`，`replicas` 必须为 1，节点 IP 直接访问 `http://192.168.199.100:9002`
+- PVC 需要默认 StorageClass；若没有，请在 PVC 中指定 `storageClassName`
+- 管理密码与令牌密钥位于 Secret，修改后重新 `kubectl apply` 并 `rollout restart deploy/vcall`
+- 多节点或需域名访问时，改用 NodePort/Ingress 并移除 `hostPort`
+
+## 11. 排障
 
 | 现象 | 排查 |
 | --- | --- |

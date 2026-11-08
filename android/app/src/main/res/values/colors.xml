@@ -6,9 +6,11 @@
     <color name="line">#FF22304A</color>
     <color name="text">#FFE9EEFB</color>
     <color name="text_muted">#FF8B9BB8</color>
-    <color name="accent">#FF3B82F6</color>
+    <color name="accent">#FF07C160</color>
     <color name="accent_cyan">#FF22D3EE</color>
-    <color name="danger">#FFEF4444</color>
+    <color name="wechat_green">#FF07C160</color>
+    <color name="wechat_green_dark">#FF06AD56</color>
+    <color name="danger">#FFE64340</color>
     <color name="success">#FF22C55E</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>

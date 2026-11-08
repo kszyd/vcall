@@ -1,0 +1,143 @@
+# VCall 信令服务 · Kubernetes 部署清单（YAML）
+# 用法：
+#   kubectl apply -f deploy/k8s.yaml
+# 访问（单节点，hostPort 直接占用 9002）：
+#   http://192.168.199.100:9002/admin
+#
+# 说明：
+#   - Deployment 使用 hostPort 9002，因此 replicas 必须为 1
+#   - 若集群无默认 StorageClass，请为 PVC 指定 storageClassName
+#   - 公网/多节点场景请改用 NodePort 或 Ingress，并移除 hostPort
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: vcall
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: vcall-secret
+  namespace: vcall
+type: Opaque
+stringData:
+  # 部署前请修改
+  VCALL_ADMIN_PASSWORD: "vcall@2026"
+  VCALL_ADMIN_SECRET: "please-change-this-secret"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vcall-config
+  namespace: vcall
+data:
+  VCALL_PORT: "9002"
+  VCALL_DATA_DIR: "/data"
+  VCALL_MAX_ROOM_MEMBERS: "2"
+  VCALL_LOG_LEVEL: "info"
+  TZ: "Asia/Shanghai"
+  # 跨网段时填写 TURN
+  VCALL_TURN_URL: ""
+  VCALL_TURN_USER: ""
+  VCALL_TURN_PASS: ""
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: vcall-data
+  namespace: vcall
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vcall
+  namespace: vcall
+  labels:
+    app: vcall
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: vcall
+  template:
+    metadata:
+      labels:
+        app: vcall
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: vcall
+          image: kszyd/vcall-server:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 9002
+              hostPort: 9002
+          envFrom:
+            - configMapRef:
+                name: vcall-config
+          env:
+            - name: VCALL_ADMIN_USER
+              value: "admin"
+            - name: VCALL_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: vcall-secret
+                  key: VCALL_ADMIN_PASSWORD
+            - name: VCALL_ADMIN_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: vcall-secret
+                  key: VCALL_ADMIN_SECRET
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 3
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: vcall-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vcall
+  namespace: vcall
+spec:
+  type: ClusterIP
+  selector:
+    app: vcall
+  ports:
+    - name: http
+      port: 9002
+      targetPort: http

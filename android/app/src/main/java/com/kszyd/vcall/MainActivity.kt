@@ -2,6 +2,8 @@ package com.kszyd.vcall
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.content.res.ColorStateList
+import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -11,6 +13,7 @@ import android.view.View
 import android.view.WindowManager
 import android.widget.Button
 import android.widget.EditText
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
@@ -22,6 +25,10 @@ import org.webrtc.IceCandidate
 import org.webrtc.PeerConnection
 import org.webrtc.SurfaceViewRenderer
 
+/**
+ * 仿微信视频通话的界面与交互：
+ * 加入 -> 呼叫等待页 -> 接通（远端全屏 + 右上本地小窗 + 底部圆钮）-> 挂断
+ */
 class MainActivity : AppCompatActivity(), SignalingClient.Listener {
 
     private lateinit var prefs: AppPrefs
@@ -35,11 +42,11 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
     private var peerId: String? = null
     private var currentRoom = ""
     private var deviceName = ""
+    private var peerName = ""
     private var iceServers: List<PeerConnection.IceServer> = emptyList()
     private var isTv = false
 
     private var micOn = true
-    private var camOn = true
     private var speakerOn = true
     private var inCall = false
     private var joining = false
@@ -56,24 +63,33 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
     private lateinit var callPanel: View
     private lateinit var remoteRenderer: SurfaceViewRenderer
     private lateinit var localRenderer: SurfaceViewRenderer
+    private lateinit var localContainer: View
+    private lateinit var topBar: View
+    private lateinit var bottomBar: View
+    private lateinit var peerNameView: TextView
+    private lateinit var callTimer: TextView
+    private lateinit var netStatus: TextView
     private lateinit var waitingOverlay: LinearLayout
-    private lateinit var waitingTitle: TextView
+    private lateinit var avatarText: TextView
+    private lateinit var waitingName: TextView
+    private lateinit var waitingHint: TextView
     private lateinit var waitingRoom: TextView
-    private lateinit var roomBadge: TextView
-    private lateinit var stateBadge: TextView
-    private lateinit var statsBadge: TextView
+    private lateinit var cancelButton: View
+    private lateinit var micButton: View
+    private lateinit var micIcon: ImageView
+    private lateinit var micLabel: TextView
+    private lateinit var switchButton: View
+    private lateinit var hangupButton: View
+    private lateinit var speakerButton: View
+    private lateinit var speakerIcon: ImageView
+    private lateinit var speakerLabel: TextView
     private lateinit var hintOverlay: TextView
-    private lateinit var micButton: Button
-    private lateinit var camButton: Button
-    private lateinit var switchButton: Button
-    private lateinit var speakerButton: Button
-    private lateinit var hangupButton: Button
 
     private val ticker = object : Runnable {
         override fun run() {
             if (inCall && callStartAt > 0) {
                 val elapsed = (SystemClock.elapsedRealtime() - callStartAt) / 1000
-                stateBadge.text = getString(R.string.state_in_call) + " " + formatDuration(elapsed)
+                callTimer.text = formatDuration(elapsed)
             }
             handler.postDelayed(this, 1000)
         }
@@ -94,9 +110,7 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
         setupListeners()
         showSetup()
 
-        if (isTv) {
-            joinButton.requestFocus()
-        }
+        if (isTv) joinButton.requestFocus()
     }
 
     private fun bindViews() {
@@ -111,18 +125,27 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
         callPanel = findViewById(R.id.callPanel)
         remoteRenderer = findViewById(R.id.remoteRenderer)
         localRenderer = findViewById(R.id.localRenderer)
+        localContainer = findViewById(R.id.localContainer)
+        topBar = findViewById(R.id.topBar)
+        bottomBar = findViewById(R.id.bottomBar)
+        peerNameView = findViewById(R.id.peerName)
+        callTimer = findViewById(R.id.callTimer)
+        netStatus = findViewById(R.id.netStatus)
         waitingOverlay = findViewById(R.id.waitingOverlay)
-        waitingTitle = findViewById(R.id.waitingTitle)
+        avatarText = findViewById(R.id.avatarText)
+        waitingName = findViewById(R.id.waitingName)
+        waitingHint = findViewById(R.id.waitingHint)
         waitingRoom = findViewById(R.id.waitingRoom)
-        roomBadge = findViewById(R.id.roomBadge)
-        stateBadge = findViewById(R.id.stateBadge)
-        statsBadge = findViewById(R.id.statsBadge)
-        hintOverlay = findViewById(R.id.hintOverlay)
+        cancelButton = findViewById(R.id.cancelButton)
         micButton = findViewById(R.id.micButton)
-        camButton = findViewById(R.id.camButton)
+        micIcon = findViewById(R.id.micIcon)
+        micLabel = findViewById(R.id.micLabel)
         switchButton = findViewById(R.id.switchButton)
-        speakerButton = findViewById(R.id.speakerButton)
         hangupButton = findViewById(R.id.hangupButton)
+        speakerButton = findViewById(R.id.speakerButton)
+        speakerIcon = findViewById(R.id.speakerIcon)
+        speakerLabel = findViewById(R.id.speakerLabel)
+        hintOverlay = findViewById(R.id.hintOverlay)
     }
 
     private fun setupDefaults() {
@@ -130,17 +153,16 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
         nameInput.setText(prefs.name.ifEmpty { Build.MODEL ?: "VCall" })
         roomInput.setText(prefs.room)
         speakerOn = prefs.speakerOn
-        updateSpeakerButton()
-        updateMicButton()
-        updateCamButton()
-        roomBadge.text = "房间 " + prefs.room
+        updateMicUi()
+        updateSpeakerUi()
+        waitingRoom.text = getString(R.string.waiting_room, prefs.room)
     }
 
     private fun setupListeners() {
         joinButton.setOnClickListener { joinRoom() }
         hangupButton.setOnClickListener { leaveCall() }
+        cancelButton.setOnClickListener { leaveCall() }
         micButton.setOnClickListener { toggleMic() }
-        camButton.setOnClickListener { toggleCam() }
         switchButton.setOnClickListener { switchCamera() }
         speakerButton.setOnClickListener { toggleSpeaker() }
     }
@@ -282,19 +304,23 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
                 if (peers != null && peers.length() > 0) {
                     val peer = peers.optJSONObject(0)
                     peerId = peer?.optString("id")
-                    waitingTitle.text = "正在接通 " + (peer?.optString("name") ?: "对方") + "…"
-                    stateBadge.text = getString(R.string.state_connecting)
+                    peerName = peer?.optString("name") ?: ""
+                    waitingHint.text = getString(R.string.connecting_peer)
+                    waitingName.text = peerName.ifEmpty { getString(R.string.call_title) }
+                    avatarText.text = initialOf(peerName)
                     startOffer()
                 } else {
-                    showWaiting()
+                    showWaitingUi(getString(R.string.waiting_peer))
                 }
             }
 
             "peer-joined" -> {
                 val peer = message.optJSONObject("peer")
                 peerId = peer?.optString("id")
-                waitingTitle.text = "正在接通 " + (peer?.optString("name") ?: "对方") + "…"
-                stateBadge.text = getString(R.string.state_connecting)
+                peerName = peer?.optString("name") ?: ""
+                waitingHint.text = getString(R.string.connecting_peer)
+                waitingName.text = peerName.ifEmpty { getString(R.string.call_title) }
+                avatarText.text = initialOf(peerName)
             }
 
             "offer" -> {
@@ -326,10 +352,8 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
                 session?.closePeerConnection()
                 inCall = false
                 callStartAt = 0
-                waitingOverlay.visibility = View.VISIBLE
-                waitingTitle.text = "对方已离开"
-                waitingRoom.text = "房间 $currentRoom · 等待重新接通"
-                stateBadge.text = getString(R.string.state_waiting)
+                peerName = ""
+                showWaitingUi(getString(R.string.peer_left))
                 showHint("$name 已离开")
             }
 
@@ -341,12 +365,8 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
             "error" -> {
                 val code = message.optString("code")
                 val text = message.optString("message", "发生错误")
-                if (code == "room_full") {
-                    showHint(text)
-                    leaveCall()
-                } else {
-                    showHint(text)
-                }
+                showHint(text)
+                if (code == "room_full") leaveCall()
             }
 
             "pong" -> {
@@ -386,44 +406,65 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
     }
 
     private fun sendState() {
-        val muted = JSONObject().put("audio", !micOn).put("video", !camOn)
+        val muted = JSONObject().put("audio", !micOn).put("video", false)
         sendJson(JSONObject().put("type", "state").put("muted", muted))
     }
 
     /* ------------------------------ 通话状态 ------------------------------ */
 
     private fun onRemoteVideo() {
-        waitingOverlay.visibility = View.GONE
+        if (waitingOverlay.visibility == View.VISIBLE) {
+            waitingOverlay.animate().alpha(0f).setDuration(220).withEndAction {
+                waitingOverlay.visibility = View.GONE
+                waitingOverlay.alpha = 1f
+            }.start()
+        }
+        topBar.visibility = View.VISIBLE
+        bottomBar.visibility = View.VISIBLE
+        localContainer.visibility = View.VISIBLE
+        peerNameView.text = peerName.ifEmpty { getString(R.string.call_title) }
+        netStatus.text = getString(R.string.network_good)
+        netStatus.setTextColor(Color.parseColor("#B3FFFFFF"))
+
         if (!inCall) {
             inCall = true
             callStartAt = SystemClock.elapsedRealtime()
+            callTimer.text = "00:00"
             handler.removeCallbacks(ticker)
             handler.post(ticker)
         }
-        stateBadge.text = getString(R.string.state_in_call)
+        if (isTv) hangupButton.requestFocus()
     }
 
     private fun onConnectionState(state: String) {
         when (state) {
             "connected" -> {
-                if (inCall) stateBadge.text = getString(R.string.state_in_call)
+                netStatus.text = getString(R.string.network_good)
+                netStatus.setTextColor(Color.parseColor("#B3FFFFFF"))
             }
-            "disconnected" -> showHint("网络不稳定，正在恢复…")
-            "failed" -> showHint("连接失败，请重新加入")
+            "disconnected" -> setNetworkBad()
+            "failed" -> {
+                setNetworkBad()
+                showHint("连接失败，请重新加入")
+            }
             else -> {
             }
         }
     }
 
-    private fun onStats(stats: CallSession.StatsSnapshot) {
-        val parts = mutableListOf<String>()
-        if (stats.width > 0 && stats.height > 0) parts.add("${stats.width}×${stats.height}")
-        if (stats.fps > 0) parts.add("${stats.fps}fps")
-        if (stats.bitrateKbps > 0) parts.add("${stats.bitrateKbps}kbps")
-        if (stats.rttMs > 0) parts.add("${stats.rttMs}ms")
-        statsBadge.text = if (parts.isEmpty()) "已连接" else parts.joinToString(" · ")
+    private fun setNetworkBad() {
+        netStatus.text = getString(R.string.network_bad)
+        netStatus.setTextColor(Color.parseColor("#FFFF8A80"))
+    }
 
-        // 上报给管理后台
+    private fun onStats(stats: CallSession.StatsSnapshot) {
+        if (inCall) {
+            val bad = stats.rttMs > 350 || (stats.bitrateKbps in 1..120)
+            if (bad) setNetworkBad() else {
+                netStatus.text = getString(R.string.network_good)
+                netStatus.setTextColor(Color.parseColor("#B3FFFFFF"))
+            }
+        }
         val payload = JSONObject().apply {
             put("type", "stats")
             put("rtt", stats.rttMs)
@@ -435,48 +476,48 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
         sendJson(payload)
     }
 
+    /* ------------------------------ 控制 ------------------------------ */
+
     private fun toggleMic() {
         micOn = !micOn
         session?.setMicrophoneEnabled(micOn)
-        updateMicButton()
+        updateMicUi()
         sendState()
-        showHint(if (micOn) "麦克风已开启" else "麦克风已静音")
-    }
-
-    private fun toggleCam() {
-        camOn = !camOn
-        session?.setVideoEnabled(camOn)
-        updateCamButton()
-        sendState()
-        showHint(if (camOn) "摄像头已开启" else "摄像头已关闭")
-    }
-
-    private fun switchCamera() {
-        val switched = session?.switchCamera() == true
-        if (switched) {
-            showHint("已切换摄像头")
-        } else {
-            showHint("当前设备不支持切换摄像头")
-        }
     }
 
     private fun toggleSpeaker() {
         speakerOn = !speakerOn
         prefs.speakerOn = speakerOn
         session?.setSpeakerphone(speakerOn)
-        updateSpeakerButton()
+        updateSpeakerUi()
     }
 
-    private fun updateMicButton() {
-        micButton.text = getString(if (micOn) R.string.mic_on else R.string.mic_off)
+    private fun switchCamera() {
+        val switched = session?.switchCamera() == true
+        if (switched) showHint("已切换摄像头") else showHint("当前设备不支持切换摄像头")
     }
 
-    private fun updateCamButton() {
-        camButton.text = getString(if (camOn) R.string.cam_on else R.string.cam_off)
+    private fun updateMicUi() {
+        if (micOn) {
+            micIcon.setBackgroundResource(R.drawable.bg_circle_dark)
+            micIcon.imageTintList = ColorStateList.valueOf(Color.WHITE)
+            micLabel.text = getString(R.string.mic_on)
+        } else {
+            micIcon.setBackgroundResource(R.drawable.bg_circle_light)
+            micIcon.imageTintList = ColorStateList.valueOf(Color.BLACK)
+            micLabel.text = getString(R.string.mic_off)
+        }
     }
 
-    private fun updateSpeakerButton() {
-        speakerButton.text = getString(if (speakerOn) R.string.speaker else R.string.earpiece)
+    private fun updateSpeakerUi() {
+        speakerLabel.text = getString(if (speakerOn) R.string.speaker else R.string.earpiece)
+        if (speakerOn) {
+            speakerIcon.setBackgroundResource(R.drawable.bg_circle_dark)
+            speakerIcon.imageTintList = ColorStateList.valueOf(Color.WHITE)
+        } else {
+            speakerIcon.setBackgroundResource(R.drawable.bg_circle_light)
+            speakerIcon.imageTintList = ColorStateList.valueOf(Color.BLACK)
+        }
     }
 
     /* ------------------------------ 界面切换 ------------------------------ */
@@ -489,25 +530,39 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
     private fun showCallUi() {
         setupPanel.visibility = View.GONE
         callPanel.visibility = View.VISIBLE
+        topBar.visibility = View.GONE
+        bottomBar.visibility = View.GONE
+        localContainer.visibility = View.GONE
         waitingOverlay.visibility = View.VISIBLE
-        waitingTitle.text = getString(R.string.waiting_title)
-        waitingRoom.text = "房间 $currentRoom"
-        roomBadge.text = "房间 $currentRoom"
-        stateBadge.text = getString(R.string.state_connecting)
-        statsBadge.text = "--"
-        setSetupMessage("")
-        joinButton.isEnabled = true
-        joinButton.text = getString(R.string.join_room)
+        waitingOverlay.alpha = 1f
+        netStatus.text = getString(R.string.network_checking)
+        callTimer.text = "00:00"
+        peerNameView.text = getString(R.string.call_title)
+        waitingName.text = getString(R.string.call_title)
+        waitingHint.text = getString(R.string.waiting_peer)
+        waitingRoom.text = getString(R.string.waiting_room, currentRoom)
+        avatarText.text = initialOf(deviceName)
+        micOn = true
+        updateMicUi()
+        updateSpeakerUi()
+        if (isTv) cancelButton.requestFocus()
     }
 
-    private fun showWaiting() {
-        waitingOverlay.visibility = View.VISIBLE
-        waitingTitle.text = getString(R.string.waiting_title)
-        waitingRoom.text = "房间 $currentRoom"
-        stateBadge.text = getString(R.string.state_waiting)
+    private fun showWaitingUi(hint: String) {
         inCall = false
         callStartAt = 0
         handler.removeCallbacks(ticker)
+        topBar.visibility = View.GONE
+        bottomBar.visibility = View.GONE
+        localContainer.visibility = View.GONE
+        waitingOverlay.visibility = View.VISIBLE
+        waitingOverlay.alpha = 1f
+        waitingHint.text = hint
+        waitingName.text = peerName.ifEmpty { getString(R.string.call_title) }
+        waitingRoom.text = getString(R.string.waiting_room, currentRoom)
+        netStatus.text = getString(R.string.network_checking)
+        callTimer.text = "00:00"
+        if (isTv) cancelButton.requestFocus()
     }
 
     private fun leaveCall() {
@@ -522,13 +577,19 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
         session?.release()
         session = null
         peerId = null
+        peerName = ""
         selfId = ""
+        waitingOverlay.alpha = 1f
         waitingOverlay.visibility = View.VISIBLE
-        statsBadge.text = "--"
-        stateBadge.text = getString(R.string.state_connecting)
+        bottomBar.visibility = View.GONE
+        topBar.visibility = View.GONE
+        localContainer.visibility = View.GONE
+        callTimer.text = "00:00"
+        netStatus.text = getString(R.string.network_checking)
         showSetup()
-        updateMicButton()
-        updateCamButton()
+        updateMicUi()
+        updateSpeakerUi()
+        if (isTv) joinButton.requestFocus()
     }
 
     private fun setSetupMessage(text: String) {
@@ -544,7 +605,7 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
         hintOverlay.text = text
         hintOverlay.visibility = View.VISIBLE
         handler.removeCallbacks(hideHint)
-        handler.postDelayed(hideHint, 3000)
+        handler.postDelayed(hideHint, 2600)
         Toast.makeText(this, text, Toast.LENGTH_SHORT).show()
     }
 
@@ -566,21 +627,14 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode != REQUEST_PERMISSIONS) return
         joining = false
-        if (hasPermissions()) {
-            startJoin(serverInput.text.toString().trim())
-        } else {
-            // 缺少摄像头/麦克风仍可加入房间接收画面
+        if (!hasPermissions()) {
             setupStatus.text = getString(R.string.permission_needed)
-            startJoin(serverInput.text.toString().trim())
         }
+        startJoin(serverInput.text.toString().trim())
     }
 
     override fun onBackPressed() {
-        if (callPanel.visibility == View.VISIBLE) {
-            leaveCall()
-        } else {
-            super.onBackPressed()
-        }
+        if (callPanel.visibility == View.VISIBLE) leaveCall() else super.onBackPressed()
     }
 
     override fun onDestroy() {
@@ -598,11 +652,17 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
         session = null
     }
 
+    private fun initialOf(name: String): String {
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) return "V"
+        return trimmed.substring(0, 1).uppercase()
+    }
+
     private fun versionName(): String {
         return try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.0.0"
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "1.1.0"
         } catch (t: Throwable) {
-            "1.0.0"
+            "1.1.0"
         }
     }
 

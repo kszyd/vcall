@@ -29,13 +29,15 @@
 
 ## 功能
 
+- 仿微信视频通话界面：呼叫等待页（头像/昵称/取消）、全屏远端画面、右上角本地小窗、底部圆形按钮（静音 / 翻转 / 挂断 / 免提）
+- 通话计时与网络质量提示（网络良好 / 网络不佳），静音时按钮变白底黑图标
+- 遥控器操作：方向键移动焦点、确认键操作、返回键挂断；电视端按钮与字号自动放大
 - 房间号配对通话，1 对 1，加入即呼叫；手机与电视可互通
-- 视频 / 麦克风开关、前后摄像头切换、扬声器/听筒切换、通话计时
 - 服务端实时显示在线设备数、活跃房间、通话时长、分辨率/帧率/码率/延迟
 - Web 管理后台：登录鉴权、房间与设备列表、强制断开、通话记录、日志、公告、单房间人数上限
 - 同源网页通话页 `/call`，电脑或电视浏览器可直接加入，便于排障
 - 心跳保活、断线提示、房间自动回收
-- 零第三方依赖的服务端（无 npm install 步骤），镜像约 60 MB
+- 零第三方依赖的服务端（无 npm install 步骤），镜像约 48 MB
 
 ## 目录结构
 
@@ -47,8 +49,11 @@ vcall/
 │  ├─ public/call/         网页通话页
 │  ├─ test/                联调测试（32 项）
 │  └─ Dockerfile
-├─ android/                Android 客户端（Kotlin + WebRTC）
+├─ android/                Android 客户端（Kotlin + WebRTC，微信式界面）
 │  └─ app/src/main/java/com/kszyd/vcall/
+├─ deploy/
+│  ├─ docker-compose.yaml  Docker Compose 部署（YAML）
+│  └─ k8s.yaml             Kubernetes 部署清单（YAML）
 ├─ docker-compose.yml      本地构建镜像启动
 ├─ docker-compose.hub.yml  直接拉取 Docker Hub 镜像启动
 ├─ .github/workflows/      APK 构建发布 / 镜像构建推送
@@ -61,11 +66,13 @@ vcall/
 
 ### 方式 A：拉取 Docker Hub 镜像（推荐）
 
+标准 YAML 部署文件：`deploy/docker-compose.yaml`
+
 ```bash
 docker pull kszyd/vcall-server:latest
 
 # 在仓库目录执行
-docker compose -f docker-compose.hub.yml up -d
+docker compose -f deploy/docker-compose.yaml up -d
 ```
 
 或不用 compose：
@@ -84,6 +91,19 @@ docker run -d --name vcall --restart unless-stopped \
 ```bash
 docker compose up -d --build
 ```
+
+### 方式 C：Kubernetes（YAML）
+
+清单文件：`deploy/k8s.yaml`（Namespace / Secret / ConfigMap / PVC / Deployment / Service）
+
+```bash
+kubectl apply -f deploy/k8s.yaml
+kubectl -n vcall rollout status deploy/vcall
+```
+
+- Deployment 使用 `hostPort: 9002`，因此 `replicas` 固定为 `1`，节点 IP 可直接访问 `http://192.168.199.100:9002`
+- 若集群没有默认 StorageClass，请为 PVC 指定 `storageClassName`
+- 管理密码与令牌密钥在 `Secret` 中修改后重新 apply
 
 ### 访问
 
@@ -109,10 +129,11 @@ APK 使用 debug 签名，可直接安装并覆盖升级；电视可用 U 盘或
 
 ### 使用
 
-1. 打开应用，服务器填 `192.168.199.100:9002`（默认已填）
-2. 填写昵称与房间号（默认 `1001`）
-3. 点击「加入房间」，另一台设备输入相同房间号即可接通
-4. 遥控器：方向键移动焦点，确认键操作，返回键挂断
+1. 打开应用，服务器地址已预填 `192.168.199.100:9002`
+2. 填写昵称与房间号（默认 `1001`），点「加入房间」
+3. 进入呼叫等待页，另一台设备加入同一房间后自动接通
+4. 接通后底部四个圆钮：静音、翻转、挂断、免提；顶部显示对方昵称与通话时长
+5. 电视遥控器：方向键移动焦点（按钮高亮），确认键执行，返回键挂断；电视端控件自动放大
 
 ### 兼容性
 
