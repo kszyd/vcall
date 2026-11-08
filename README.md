@@ -114,9 +114,9 @@ kubectl -n vcall rollout status deploy/vcall
 | 健康检查 | http://192.168.199.100:9002/api/health |
 | 信令地址 | ws://192.168.199.100:9002/ws |
 
-默认管理账号：`admin` / `vcall@2026`（请通过 `.env` 或环境变量修改）。
+默认管理账号：`admin` / `vcall@2026`（请直接修改 YAML 中的 `VCALL_ADMIN_PASSWORD`）。
 
-复制 `.env.example` 为 `.env` 可集中配置密码、公告、STUN/TURN 等，compose 会自动读取。
+所有配置直接写在 `deploy/docker-compose.yaml` 的 `environment` 中，不使用 `.env` 文件；数据目录为 `deploy/data`（即相对 compose 文件的 `./data`）。
 
 ## 二、Android 客户端
 
@@ -178,7 +178,7 @@ cd android
 
 | 工作流 | 触发 | 产物 |
 | --- | --- | --- |
-| `Android APK` | 推送 `android/**` 或手动 | APK 制品 + 自动创建 `v1.0.0` Release |
+| `Android APK` | 推送 `android/**` 或手动 | APK 制品 + 自动创建对应版本号的 Release |
 | `Docker Image` | 推送 `server/**` 或手动 | `kszyd/vcall-server:latest` 多架构镜像（amd64/arm64） |
 
 Docker Hub 凭据存放在仓库 Secrets：`DOCKERHUB_USERNAME`、`DOCKERHUB_TOKEN`。
@@ -199,7 +199,7 @@ Docker Hub 凭据存放在仓库 Secrets：`DOCKERHUB_USERNAME`、`DOCKERHUB_TOK
 内网建议 5GHz Wi-Fi；电视使用有线网络更稳。跨网段时需配置 TURN。
 
 **忘记管理密码？**
-修改 `.env` 中 `VCALL_ADMIN_PASSWORD` 后 `docker compose up -d` 重启。
+修改 `deploy/docker-compose.yaml` 中的 `VCALL_ADMIN_PASSWORD`，再执行 `docker compose -f deploy/docker-compose.yaml up -d --force-recreate`。
 
 ## 安全说明
 

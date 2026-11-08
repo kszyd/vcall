@@ -1,4 +1,7 @@
-# 直接拉取 Docker Hub 镜像运行（无需源码与构建）
+# 直接拉取 Docker Hub 镜像启动（配置直接写在 YAML，数据目录 ./data）
+# 用法：docker compose -f docker-compose.hub.yml up -d
+name: vcall
+
 services:
   vcall:
     image: kszyd/vcall-server:latest
@@ -9,18 +12,19 @@ services:
     environment:
       VCALL_PORT: "9002"
       VCALL_DATA_DIR: "/data"
-      VCALL_ADMIN_USER: ${VCALL_ADMIN_USER:-admin}
-      VCALL_ADMIN_PASSWORD: ${VCALL_ADMIN_PASSWORD:-vcall@2026}
-      VCALL_ADMIN_SECRET: ${VCALL_ADMIN_SECRET:-please-change-this-secret}
-      VCALL_MAX_ROOM_MEMBERS: ${VCALL_MAX_ROOM_MEMBERS:-2}
-      VCALL_STUN_URLS: ${VCALL_STUN_URLS:-}
-      VCALL_TURN_URL: ${VCALL_TURN_URL:-}
-      VCALL_TURN_USER: ${VCALL_TURN_USER:-}
-      VCALL_TURN_PASS: ${VCALL_TURN_PASS:-}
-      VCALL_LOG_LEVEL: ${VCALL_LOG_LEVEL:-info}
-      TZ: ${TZ:-Asia/Shanghai}
+      VCALL_ADMIN_USER: "admin"
+      VCALL_ADMIN_PASSWORD: "vcall@2026"
+      VCALL_ADMIN_SECRET: "please-change-this-secret"
+      VCALL_MAX_ROOM_MEMBERS: "2"
+      VCALL_ANNOUNCEMENT: ""
+      VCALL_LOG_LEVEL: "info"
+      TZ: "Asia/Shanghai"
+      VCALL_STUN_URLS: ""
+      VCALL_TURN_URL: ""
+      VCALL_TURN_USER: ""
+      VCALL_TURN_PASS: ""
     volumes:
-      - vcall-data:/data
+      - ./data:/data
     healthcheck:
       test:
         - CMD
@@ -36,6 +40,3 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
-
-volumes:
-  vcall-data:

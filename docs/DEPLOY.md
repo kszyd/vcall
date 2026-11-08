@@ -10,10 +10,12 @@
 
 ```bash
 mkdir -p /opt/vcall && cd /opt/vcall
-curl -O https://raw.githubusercontent.com/kszyd/vcall/main/docker-compose.hub.yml
-docker compose -f docker-compose.hub.yml up -d
-docker compose -f docker-compose.hub.yml logs -f
+curl -O https://raw.githubusercontent.com/kszyd/vcall/main/deploy/docker-compose.yaml
+docker compose -f docker-compose.yaml up -d
+docker compose -f docker-compose.yaml logs -f
 ```
+
+数据会保存在当前目录的 `./data`。
 
 验证：
 
@@ -31,31 +33,26 @@ docker compose up -d --build
 
 ## 4. 修改管理密码
 
-复制 `.env.example` 为 `.env`：
+直接编辑 `deploy/docker-compose.yaml` 的 `environment` 段（不使用 `.env`）：
 
-```bash
-cp .env.example .env
-```
-
-编辑：
-
-```ini
-VCALL_ADMIN_USER=admin
-VCALL_ADMIN_PASSWORD=YourStrongPassword
-VCALL_ADMIN_SECRET=随机长字符串（可用 openssl rand -hex 32 生成）
+```yaml
+    environment:
+      VCALL_ADMIN_USER: "admin"
+      VCALL_ADMIN_PASSWORD: "YourStrongPassword"
+      VCALL_ADMIN_SECRET: "随机长字符串（可用 openssl rand -hex 32 生成）"
 ```
 
 重启生效：
 
 ```bash
-docker compose -f docker-compose.hub.yml up -d
+docker compose -f deploy/docker-compose.yaml up -d --force-recreate
 ```
 
 ## 5. 数据持久化
 
-- 命名卷 `vcall-data` 挂载到容器 `/data`
+- 绑定目录 `./data`（与 compose 文件同级，即 `deploy/data`）挂载到容器 `/data`
 - 保存 `settings.json`（管理端修改的公告/人数上限）与可选日志
-- 备份：`docker run --rm -v vcall-data:/data -v $PWD:/backup alpine tar czf /backup/vcall-data.tar.gz -C /data .`
+- 备份：`tar czf vcall-data.tar.gz -C deploy/data .`
 
 ## 6. 跨网段 / 公网访问（可选）
 
