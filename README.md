@@ -215,8 +215,8 @@ Docker Hub 凭据存放在仓库 Secrets：`DOCKERHUB_USERNAME`、`DOCKERHUB_TOK
 **电视安装后桌面不显示图标？**
 确认使用支持 Leanback 的启动器；应用已声明 `LEANBACK_LAUNCHER` 与 banner。
 
-**双方都显示「等待对方」？**
-确认房间号一致、服务器地址可访问（浏览器打开 `/api/health` 验证）。
+**通讯录里看不到对方？**
+确认两台终端填写的是同一服务器地址，且都能访问 `/api/health`；终端离线或昵称被搜索框过滤也会看不到。
 
 **画面卡顿或黑屏？**
 内网建议 5GHz Wi-Fi；电视使用有线网络更稳。跨网段时需配置 TURN。
