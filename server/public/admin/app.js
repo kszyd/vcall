@@ -410,17 +410,20 @@
     const btn = $('saveSettings');
     btn.disabled = true;
     try {
-      await api('/api/admin/settings', {
+      const data = await api('/api/admin/settings', {
         method: 'POST',
         body: JSON.stringify({
           announcement: $('announcement').value,
           maxCallMembers: Number($('maxMembers').value),
         }),
       });
-      $('settingsHint').textContent = '已保存 · ' + formatClock(Date.now());
-      toast('设置已保存');
+      const online = data.online || 0;
+      $('settingsHint').textContent =
+        (data.pushed ? '公告已推送到 ' + online + ' 台在线终端' : '设置已保存') + ' · ' + formatClock(Date.now());
+      toast(data.pushed ? '公告已推送到 ' + online + ' 台在线终端' : '设置已保存');
     } catch (err) {
       toast(err.message);
+      $('settingsHint').textContent = '保存失败：' + err.message;
     } finally {
       btn.disabled = false;
     }

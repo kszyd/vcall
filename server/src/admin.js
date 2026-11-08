@@ -160,9 +160,26 @@ class AdminService {
           this.config.maxCallMembers = value;
           updated.maxCallMembers = value;
         }
-        this.saveSettings(updated);
+        if (!Object.keys(updated).length) {
+          return this.json(res, 400, { ok: false, error: '没有需要保存的设置' });
+        }
+        const saved = this.saveSettings(updated);
+        if (!saved) {
+          return this.json(res, 500, {
+            ok: false,
+            error: '保存失败：数据目录不可写，请检查容器 ./data 挂载权限',
+          });
+        }
         this.logger.info('管理端更新设置', updated);
-        return this.json(res, 200, { ok: true, settings: updated });
+        if (updated.announcement !== undefined) {
+          this.signaling.broadcastAnnouncement(this.config.announcement);
+        }
+        return this.json(res, 200, {
+          ok: true,
+          settings: updated,
+          pushed: updated.announcement !== undefined,
+          online: this.signaling.onlineCount(),
+        });
       }
 
       const kickMatch = path.match(/^\/api\/admin\/(?:terminals|devices)\/([^/]+)\/kick$/);
@@ -194,7 +211,7 @@ class AdminService {
   }
 
   saveSettings(settings) {
-    if (!Object.keys(settings).length) return;
+    if (!Object.keys(settings).length) return true;
     try {
       const fs = require('fs');
       const path = require('path');
@@ -203,8 +220,13 @@ class AdminService {
         path.join(this.config.dataDir, 'settings.json'),
         JSON.stringify(settings, null, 2)
       );
+      return true;
     } catch (err) {
-      this.logger.warn('保存设置失败', { error: String(err && err.message) });
+      this.logger.warn('保存设置失败', {
+        error: String(err && err.message),
+        dir: this.config.dataDir,
+      });
+      return false;
     }
   }
 

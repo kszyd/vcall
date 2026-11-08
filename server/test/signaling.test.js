@@ -288,8 +288,23 @@ async function main() {
   e.close();
   await sleep(500);
 
+  console.log('\n[9] 公告推送');
+  const f = await new Client('F').connect();
+  await f.waitType('welcome');
+  await f.register('手机F', { platform: 'android' });
+  const saveSettings = await jsonRequest('/api/admin/settings', {
+    method: 'POST',
+    body: JSON.stringify({ announcement: '测试公告-立即推送' }),
+  }, token);
+  check('保存设置成功', saveSettings.status === 200 && saveSettings.body.ok === true);
+  check('返回推送数量', typeof saveSettings.body.online === 'number');
+  const announcement = await f.waitType('announcement');
+  check('在线终端收到公告推送', Boolean(announcement && announcement.text === '测试公告-立即推送'));
+  f.close();
+
   const logs = await jsonRequest('/api/admin/logs?limit=80', {}, token);
   check('日志记录终端注册', (logs.body.logs || []).some((l) => l.message.includes('终端注册')));
+  check('日志记录公告推送', (logs.body.logs || []).some((l) => l.message.includes('已推送公告')));
 
   console.log('\n结果：' + passed + ' 通过，' + failed + ' 失败');
   if (failed) {

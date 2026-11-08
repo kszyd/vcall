@@ -91,10 +91,10 @@
         <article class="card">
           <div class="card-head">
             <h2>公告与设置</h2>
-            <span class="muted small">立即生效</span>
+            <span class="muted small">推送到终端</span>
           </div>
           <label class="field">
-            <span>客户端公告（显示在加入页）</span>
+            <span>客户端公告（保存后推送到在线终端）</span>
             <input id="announcement" type="text" maxlength="200" placeholder="例如：今晚 22:00 维护" />
           </label>
           <div class="row">
@@ -102,9 +102,9 @@
               <span>单次通话最大人数</span>
               <input id="maxMembers" type="number" min="2" max="12" step="1" />
             </label>
-            <button class="btn primary" id="saveSettings" type="button">保存</button>
+            <button class="btn primary" id="saveSettings" type="button">保存并推送</button>
           </div>
-          <p class="hint muted" id="settingsHint">修改后写入容器数据卷，重启后仍保留。</p>
+          <p class="hint muted" id="settingsHint">保存后会立即推送到所有在线终端，并写入数据目录。</p>
         </article>
       </section>
 
@@ -158,7 +158,7 @@
           <div class="table-wrap">
             <table>
               <thead>
-                <tr><th>房间号</th><th>开始时间</th><th>时长</th><th>接入次数</th></tr>
+                <tr><th>通话 ID</th><th>开始时间</th><th>时长</th><th>接入次数</th></tr>
               </thead>
               <tbody id="historyBody">
                 <tr><td colspan="4" class="empty">暂无通话</td></tr>

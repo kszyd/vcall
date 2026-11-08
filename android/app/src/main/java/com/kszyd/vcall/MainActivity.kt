@@ -649,6 +649,13 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
                 logout()
             }
 
+            "announcement" -> {
+                val text = message.optString("text", "")
+                announcementText.text = text
+                announcementText.visibility = if (text.isNotEmpty()) View.VISIBLE else View.GONE
+                toast(if (text.isNotEmpty()) "公告：$text" else "公告已清除")
+            }
+
             "error" -> {
                 val text = message.optString("message", "发生错误")
                 toast(text)

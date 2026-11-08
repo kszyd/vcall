@@ -675,6 +675,19 @@ class SignalingService {
       .sort((a, b) => b.createdAt - a.createdAt);
   }
 
+  /** 把公告即时推送到所有在线终端 */
+  broadcastAnnouncement(text) {
+    const message = typeof text === 'string' ? text : '';
+    let count = 0;
+    for (const terminal of this.terminals.values()) {
+      if (!terminal.registered) continue;
+      this._send(terminal, { type: 'announcement', text: message });
+      count += 1;
+    }
+    this.logger.info('已推送公告', { terminals: count, text: message });
+    return count;
+  }
+
   metrics() {
     return { samples: this.samples, history: this.history.slice(0, 50) };
   }

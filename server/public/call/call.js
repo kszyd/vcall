@@ -248,6 +248,11 @@
         leaveCall(true);
         break;
 
+      case 'announcement':
+        $('announcement').textContent = msg.text || '';
+        toast(msg.text ? '公告：' + msg.text : '公告已清除');
+        break;
+
       case 'error':
         toast(msg.message || '发生错误');
         if (msg.code === 'busy' || msg.code === 'no_available') hideIncoming();
