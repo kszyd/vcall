@@ -2,6 +2,21 @@
 
 前后端分离的内网视频通话方案：**Node.js 信令服务 + Web 管理后台** 用 Docker 部署，**Android APK** 覆盖手机与电视（minSdk 23）。默认服务地址 `http://192.168.199.100:9002`。
 
+## 直达链接
+
+| 内容 | 地址 |
+| --- | --- |
+| 源码仓库 | https://github.com/kszyd/vcall |
+| APK 下载 | https://github.com/kszyd/vcall/releases/latest |
+| 容器镜像 | https://hub.docker.com/r/kszyd/vcall-server |
+
+## 验证情况
+
+- 服务端 32 项联调测试全部通过：房间加入、SDP/ICE 转发、满员拒绝、管理员踢人、通话归档、鉴权与静态资源
+- 管理后台已在 Chromium 中完成登录、仪表盘与日志渲染验证
+- APK 由 GitHub Actions 构建成功：含 `arm64-v8a` / `armeabi-v7a` 原生库、v1+v2 签名、Leanback 启动声明
+- 尚未验证：真机摄像头/麦克风通话、电视实机安装（缺少测试设备）
+
 ```
 ┌─────────────────────┐        WebSocket 信令         ┌──────────────────────┐
 │  Android 手机 / 电视 │ ◄──────────────────────────► │  VCall 信令服务        │
