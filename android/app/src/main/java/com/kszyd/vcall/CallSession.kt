@@ -18,6 +18,7 @@ import org.webrtc.MediaConstraints
 import org.webrtc.MediaStream
 import org.webrtc.PeerConnection
 import org.webrtc.RendererCommon
+import org.webrtc.RtpParameters
 import org.webrtc.RtpReceiver
 import org.webrtc.RtpTransceiver
 import org.webrtc.SdpObserver
@@ -237,14 +238,14 @@ class CallSession(
     }
 
     /**
-     * 把视频码率上限提到 6 Mbps，并保留 WebRTC 的带宽自适应：
-     * 网络好时按 1080p 高码率发送，带宽不足时自动降码率/分辨率。
+     * 把视频码率上限提到 12 Mbps 并给出起始码率，配合 WebRTC 带宽自适应：
+     * 带宽充足时按 1080p 高码率发送，不足时自动降码率/帧率。
      */
     private fun tuneSdp(sdp: String): String {
         val lines = sdp.split("\r\n").toMutableList()
         val index = lines.indexOfFirst { it.startsWith("m=video") }
         if (index >= 0 && !lines.getOrNull(index + 1).orEmpty().startsWith("b=")) {
-            lines.add(index + 1, "b=AS:6000")
+            lines.add(index + 1, "b=AS:12000")
         }
 
         var inVideo = false
@@ -255,10 +256,29 @@ class CallSession(
             } else if (line.startsWith("m=")) {
                 inVideo = false
             } else if (inVideo && line.startsWith("a=fmtp:") && !line.contains("x-google-max-bitrate")) {
-                lines[i] = line + ";x-google-max-bitrate=6000;x-google-min-bitrate=300"
+                lines[i] = line + ";x-google-max-bitrate=12000;x-google-min-bitrate=500;x-google-start-bitrate=3000"
             }
         }
         return lines.joinToString("\r\n")
+    }
+
+    /**
+     * 画质优先：带宽不足时保持分辨率、先降帧率；同时放开编码码率上限。
+     * 需在 SDP 协商完成后调用。
+     */
+    private fun applyVideoParams(pc: PeerConnection) {
+        try {
+            val sender = pc.senders.firstOrNull { it.track()?.kind() == "video" } ?: return
+            val params = sender.parameters ?: return
+            params.degradationPreference = RtpParameters.DegradationPreference.MAINTAIN_RESOLUTION
+            params.encodings?.forEach { encoding ->
+                encoding.maxBitrateBps = 12_000_000
+                encoding.minBitrateBps = 500_000
+                encoding.maxFramerate = 30
+            }
+            sender.setParameters(params)
+        } catch (ignored: Throwable) {
+        }
     }
 
     fun createOffer(peerId: String, name: String, onSdp: (String?) -> Unit) {
@@ -278,7 +298,11 @@ class CallSession(
                 if (sdp == null) return onSdp(null)
                 val tuned = SessionDescription(sdp.type, tuneSdp(sdp.description))
                 pc.setLocalDescription(object : SimpleSdpObserver() {
-                    override fun onSetSuccess() = onSdp(tuned.description)
+                    override fun onSetSuccess() {
+                        applyVideoParams(pc)
+                        onSdp(tuned.description)
+                    }
+
                     override fun onSetFailure(error: String?) = onSdp(null)
                 }, tuned)
             }
@@ -302,7 +326,11 @@ class CallSession(
                         if (answer == null) return onAnswer(null)
                         val tuned = SessionDescription(answer.type, tuneSdp(answer.description))
                         pc.setLocalDescription(object : SimpleSdpObserver() {
-                            override fun onSetSuccess() = onAnswer(tuned.description)
+                            override fun onSetSuccess() {
+                                applyVideoParams(pc)
+                                onAnswer(tuned.description)
+                            }
+
                             override fun onSetFailure(error: String?) = onAnswer(null)
                         }, tuned)
                     }
