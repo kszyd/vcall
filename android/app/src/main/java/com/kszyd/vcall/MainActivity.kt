@@ -251,14 +251,18 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
         }.start()
     }
 
-    private fun showControls() {
+    private fun showControls(durationMs: Long = 8000L) {
         if (!inCall) return
+        callTopBar.animate().cancel()
+        bottomBar.animate().cancel()
         callTopBar.visibility = View.VISIBLE
         bottomBar.visibility = View.VISIBLE
         callTopBar.alpha = 1f
         bottomBar.alpha = 1f
+        bottomBar.bringToFront()
+        callTopBar.bringToFront()
         handler.removeCallbacks(hideControlsRunnable)
-        handler.postDelayed(hideControlsRunnable, 5000)
+        handler.postDelayed(hideControlsRunnable, durationMs)
     }
 
     private fun setupDrag(target: View) {
@@ -355,6 +359,18 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
         } else {
             localContainer.setBackgroundResource(R.drawable.bg_local_frame)
         }
+
+        // elevation 会改变 Z 轴绘制顺序：全屏画面必须降到 0，否则会盖住控制栏
+        if (swapped) {
+            localContainer.elevation = 0f
+            remoteGrid.elevation = dp(8).toFloat()
+        } else {
+            localContainer.elevation = dp(8).toFloat()
+            remoteGrid.elevation = 0f
+        }
+        bottomBar.elevation = dp(12).toFloat()
+        callTopBar.elevation = dp(12).toFloat()
+        hintOverlay.elevation = dp(16).toFloat()
 
         // 全屏画面在下、小窗在上，最后再把控制栏置顶
         if (swapped) {

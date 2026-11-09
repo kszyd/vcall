@@ -11,8 +11,8 @@ android {
         applicationId = "com.kszyd.vcall"
         minSdk = 23
         targetSdk = 34
-        versionCode = 13
-        versionName = "2.8.3"
+        versionCode = 14
+        versionName = "2.8.4"
 
         // 覆盖绝大多数手机与电视盒子；x86 模拟器如需调试可自行添加
         ndk {
