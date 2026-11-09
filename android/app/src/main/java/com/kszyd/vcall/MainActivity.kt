@@ -348,7 +348,21 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
         localContainer.layoutParams = localParams
         remoteGrid.layoutParams = gridParams
 
-        if (swapped) localContainer.bringToFront() else remoteGrid.bringToFront()
+        // 全屏时去掉小窗的圆角描边背景
+        if (swapped) {
+            localContainer.setBackgroundResource(0)
+        } else {
+            localContainer.setBackgroundResource(R.drawable.bg_local_frame)
+        }
+
+        // 全屏画面在下、小窗在上，最后再把控制栏置顶
+        if (swapped) {
+            localContainer.bringToFront()
+            remoteGrid.bringToFront()
+        } else {
+            remoteGrid.bringToFront()
+            localContainer.bringToFront()
+        }
         bottomBar.bringToFront()
         callTopBar.bringToFront()
         hintOverlay.bringToFront()

@@ -86,7 +86,8 @@ class CallSession(
         localRenderer.setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FILL)
         localRenderer.setEnableHardwareScaler(true)
         localRenderer.setMirror(true)
-        localRenderer.setZOrderMediaOverlay(true)
+        // 不能设 ZOrderMediaOverlay=true：切成全屏后会盖住控制栏与远端小窗
+        localRenderer.setZOrderMediaOverlay(false)
     }
 
     fun setIceServers(servers: List<PeerConnection.IceServer>) {
