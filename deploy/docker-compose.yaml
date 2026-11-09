@@ -3,16 +3,18 @@
 #   docker compose -f deploy/docker-compose.yaml up -d
 # 访问：
 #   管理后台  http://192.168.199.100:9002/admin
-#   网页端    http://192.168.199.100:9002/call
+#   网页端    http://192.168.199.100:9002/call        （HTTP 只能观看，不能采集）
+#   网页端TLS https://192.168.199.100:9443/call      （浏览器可双向通话）
 name: vcall
 
 services:
   vcall:
-    image: kszyd/vcall-server:latest      # 需要固定版本时改成 :2.4.0 这类标签
+    image: kszyd/vcall-server:latest      # 需要固定版本时改成 :2.9.5 这类标签
     container_name: vcall
     restart: unless-stopped
     ports:
-      - "9002:9002"                       # 宿主机:容器；管理后台、网页端、信令共用
+      - "9002:9002"                       # 管理后台、APK 信令、网页端
+      - "9443:9443"                       # HTTPS，浏览器摄像头需要
 
     environment:
       # ---------- 管理后台 ----------
@@ -22,6 +24,11 @@ services:
       # ---------- 通话 ----------
       VCALL_MAX_CALL_MEMBERS: "6"         # 单次通话人数上限（2-12）
       VCALL_ANNOUNCEMENT: ""              # 公告，留空即可；也可在管理后台推送
+
+      # ---------- HTTPS（证书放到 ./certs） ----------
+      VCALL_TLS_PORT: "9443"
+      VCALL_TLS_CERT: "/certs/server.crt"
+      VCALL_TLS_KEY: "/certs/server.key"
 
       # ---------- 其它 ----------
       TZ: "Asia/Shanghai"                 # 日志时区
@@ -34,6 +41,7 @@ services:
 
     volumes:
       - ./data:/data                      # 持久化设置（settings.json），首次启动自动创建
+      - ./certs:/certs:ro                 # 自签证书目录（server.crt / server.key）
 
     logging:
       driver: json-file

@@ -12,6 +12,7 @@ services:
     restart: unless-stopped
     ports:
       - "9002:9002"                       # 管理后台 / 网页端 / 信令共用
+      - "9443:9443"                       # HTTPS，浏览器摄像头需要
 
     environment:
       # ---------- 管理后台 ----------
@@ -21,6 +22,11 @@ services:
       # ---------- 通话 ----------
       VCALL_MAX_CALL_MEMBERS: "6"         # 单次通话人数上限（2-12）
       VCALL_ANNOUNCEMENT: ""
+
+      # ---------- HTTPS（证书放到 ./certs） ----------
+      VCALL_TLS_PORT: "9443"
+      VCALL_TLS_CERT: "/certs/server.crt"
+      VCALL_TLS_KEY: "/certs/server.key"
 
       # ---------- 其它 ----------
       TZ: "Asia/Shanghai"
@@ -32,6 +38,7 @@ services:
 
     volumes:
       - ./data:/data                      # 持久化设置
+      - ./certs:/certs:ro                 # 自签证书
 
     logging:
       driver: json-file
