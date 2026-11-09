@@ -108,14 +108,14 @@ class CallSession(
         iceServers = servers
     }
 
-    fun startLocalMedia(wideAngle: Boolean = false): Boolean {
+    fun startLocalMedia(): Boolean {
         if (released) return false
-        startVideoCapture(wideAngle)
+        startVideoCapture()
         startAudio()
         return hasVideo
     }
 
-    private fun startVideoCapture(wideAngle: Boolean) {
+    private fun startVideoCapture() {
         val capturer = createCapturer(frontCamera) ?: run {
             hasVideo = false
             return
@@ -129,12 +129,10 @@ class CallSession(
             track.addSink(localRenderer)
             videoTrack = track
             capturer.initialize(surfaceHelper, context, source.capturerObserver)
-            // 广角模式用 720p：多数摄像头 720p 为全视场采样，视野比 1080p 裁剪模式更宽
-            val targetWidth = if (wideAngle) 1280 else 1920
-            val targetHeight = if (wideAngle) 720 else 1080
-            capturer.startCapture(targetWidth, targetHeight, 30)
+            // 固定 1080p 采集，码率与帧率由 WebRTC 按带宽自适应
+            capturer.startCapture(1920, 1080, 30)
             try {
-                source.adaptOutputFormat(targetWidth, targetHeight, 30)
+                source.adaptOutputFormat(1920, 1080, 30)
             } catch (ignored: Throwable) {
             }
             videoCapturer = capturer
@@ -262,7 +260,7 @@ class CallSession(
         val lines = sdp.split("\r\n").toMutableList()
         val index = lines.indexOfFirst { it.startsWith("m=video") }
         if (index >= 0 && !lines.getOrNull(index + 1).orEmpty().startsWith("b=")) {
-            lines.add(index + 1, "b=AS:12000")
+            lines.add(index + 1, "b=AS:20000")
         }
 
         var inVideo = false
@@ -273,7 +271,7 @@ class CallSession(
             } else if (line.startsWith("m=")) {
                 inVideo = false
             } else if (inVideo && line.startsWith("a=fmtp:") && !line.contains("x-google-max-bitrate")) {
-                lines[i] = line + ";x-google-max-bitrate=12000;x-google-min-bitrate=500;x-google-start-bitrate=3000"
+                lines[i] = line + ";x-google-max-bitrate=20000;x-google-min-bitrate=500;x-google-start-bitrate=4000"
             }
         }
         return lines.joinToString("\r\n")
@@ -289,7 +287,7 @@ class CallSession(
             val params = sender.parameters ?: return
             params.degradationPreference = RtpParameters.DegradationPreference.MAINTAIN_RESOLUTION
             params.encodings?.forEach { encoding ->
-                encoding.maxBitrateBps = 12_000_000
+                encoding.maxBitrateBps = 20_000_000
                 encoding.minBitrateBps = 500_000
                 encoding.maxFramerate = 30
             }

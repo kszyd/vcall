@@ -2,6 +2,7 @@ package com.kszyd.vcall
 
 import android.Manifest
 import android.app.AlertDialog
+import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.graphics.Color
@@ -28,6 +29,9 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import org.json.JSONArray
 import org.json.JSONObject
 import org.webrtc.IceCandidate
@@ -80,6 +84,7 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
     private var dragStartLeft = 0
     private var dragStartTop = 0
     private var dragging = false
+    private var fullscreen = false
     private val touchSlop by lazy { ViewConfiguration.get(this).scaledTouchSlop }
 
     private lateinit var loginPanel: View
@@ -92,7 +97,7 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
     private lateinit var joinButton: Button
     private lateinit var setupStatus: TextView
     private lateinit var announcementText: TextView
-    private lateinit var wideAngleCheck: CheckBox
+    private lateinit var fullscreenButton: TextView
 
     private lateinit var myAvatar: TextView
     private lateinit var myName: TextView
@@ -174,7 +179,7 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
         joinButton = findViewById(R.id.joinButton)
         setupStatus = findViewById(R.id.setupStatus)
         announcementText = findViewById(R.id.announcementText)
-        wideAngleCheck = findViewById(R.id.wideAngleCheck)
+        fullscreenButton = findViewById(R.id.fullscreenButton)
 
         myAvatar = findViewById(R.id.myAvatar)
         myName = findViewById(R.id.myName)
@@ -215,7 +220,6 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
         serverInput.setText(prefs.server)
         nameInput.setText(prefs.name.ifEmpty { Build.MODEL ?: "VCall" })
         speakerOn = prefs.speakerOn
-        wideAngleCheck.isChecked = prefs.wideAngle
         updateMicUi()
         updateSpeakerUi()
     }
@@ -225,7 +229,7 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
         logoutButton.setOnClickListener { logout() }
         callSelectedButton.setOnClickListener { inviteSelected() }
         myName.setOnClickListener { editNickname() }
-        wideAngleCheck.setOnCheckedChangeListener { _, checked -> prefs.wideAngle = checked }
+        fullscreenButton.setOnClickListener { toggleFullscreen() }
         searchInput.addTextChangedListenerSimple { renderTerminals() }
         micButton.setOnClickListener { toggleMic() }
         switchButton.setOnClickListener { switchCamera() }
@@ -238,6 +242,56 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
     }
 
     /* ------------------------------ 小窗拖动与画面切换 ------------------------------ */
+
+    private fun toggleFullscreen() {
+        fullscreen = !fullscreen
+        if (fullscreen) {
+            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+            hideSystemBars()
+            fullscreenButton.text = getString(R.string.exit_fullscreen)
+        } else {
+            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
+            showSystemBars()
+            fullscreenButton.text = getString(R.string.fullscreen)
+        }
+        showControls()
+    }
+
+    private fun hideSystemBars() {
+        try {
+            val controller = WindowCompat.getInsetsController(window, window.decorView)
+            controller.systemBarsBehavior =
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            controller.hide(WindowInsetsCompat.Type.systemBars())
+        } catch (ignored: Throwable) {
+        }
+    }
+
+    private fun showSystemBars() {
+        try {
+            WindowCompat.getInsetsController(window, window.decorView)
+                .show(WindowInsetsCompat.Type.systemBars())
+        } catch (ignored: Throwable) {
+        }
+    }
+
+    /** 点击画面：控件显示时立即隐藏，隐藏时再唤出（不再等 5 秒） */
+    private fun toggleControls() {
+        if (!inCall) return
+        if (bottomBar.visibility == View.VISIBLE) hideControlsNow() else showControls()
+    }
+
+    private fun hideControlsNow() {
+        handler.removeCallbacks(hideControlsRunnable)
+        bottomBar.animate().cancel()
+        callTopBar.animate().cancel()
+        bottomBar.animate().alpha(0f).setDuration(150).withEndAction {
+            bottomBar.visibility = View.GONE
+        }.start()
+        callTopBar.animate().alpha(0f).setDuration(150).withEndAction {
+            callTopBar.visibility = View.GONE
+        }.start()
+    }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
@@ -298,8 +352,8 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
 
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                     if (!dragging) {
-                        // 小窗点击：交换大小画面；大画面点击：唤出控制栏
-                        if (view.width <= dp(200)) toggleMainView() else showControls()
+                        // 小窗点击：交换大小画面；大画面点击：显示/隐藏控制栏
+                        if (view.width <= dp(200)) toggleMainView() else toggleControls()
                     }
                     true
                 }
@@ -865,7 +919,7 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
             existing.setIceServers(iceServers)
             // 上一通结束后已释放采集，这里重新打开摄像头/麦克风
             if (!existing.isMediaActive) {
-                if (!existing.startLocalMedia(prefs.wideAngle)) {
+                if (!existing.startLocalMedia()) {
                     showHint(getString(R.string.no_camera))
                 }
             }
@@ -919,6 +973,12 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
     }
 
     private fun exitCall() {
+        if (fullscreen) {
+            fullscreen = false
+            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
+            showSystemBars()
+            fullscreenButton.text = getString(R.string.fullscreen)
+        }
         callId = null
         inCall = false
         callStartAt = 0

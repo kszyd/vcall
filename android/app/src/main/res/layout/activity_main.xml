@@ -96,16 +96,6 @@
                     android:inputType="text"
                     android:maxLength="24" />
 
-                <CheckBox
-                    android:id="@+id/wideAngleCheck"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="10dp"
-                    android:buttonTint="@color/wechat_green"
-                    android:text="@string/wide_angle"
-                    android:textColor="@color/text_muted"
-                    android:textSize="13sp" />
-
                 <Button
                     android:id="@+id/joinButton"
                     style="@style/VCallButton.Primary"
@@ -347,6 +337,22 @@
                 android:layout_height="wrap_content"
                 android:text="@string/network_checking"
                 android:textColor="#B3FFFFFF"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/fullscreenButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="10dp"
+                android:background="@drawable/bg_badge"
+                android:clickable="true"
+                android:focusable="true"
+                android:paddingStart="10dp"
+                android:paddingTop="4dp"
+                android:paddingEnd="10dp"
+                android:paddingBottom="4dp"
+                android:text="@string/fullscreen"
+                android:textColor="@color/white"
                 android:textSize="12sp" />
         </LinearLayout>
 
