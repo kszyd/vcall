@@ -32,11 +32,17 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import okhttp3.Call
+import okhttp3.Callback
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.Response
 import org.json.JSONArray
 import org.json.JSONObject
 import org.webrtc.IceCandidate
 import org.webrtc.PeerConnection
 import org.webrtc.SurfaceViewRenderer
+import java.io.IOException
 import kotlin.math.abs
 
 /**
@@ -85,6 +91,7 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
     private var dragStartTop = 0
     private var dragging = false
     private var fullscreen = false
+    private var announcementValue = ""
     private val touchSlop by lazy { ViewConfiguration.get(this).scaledTouchSlop }
 
     private lateinit var loginPanel: View
@@ -164,6 +171,7 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
         setupDefaults()
         setupListeners()
         showLogin()
+        fetchAnnouncement()
 
         if (isTv) joinButton.requestFocus()
     }
@@ -617,11 +625,7 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
         when (message.optString("type")) {
             "welcome" -> {
                 iceServers = CallSession.parseIceServers(message.optJSONArray("iceServers"))
-                val announcement = message.optString("announcement", "")
-                if (announcement.isNotEmpty()) {
-                    announcementText.text = announcement
-                    announcementText.visibility = View.VISIBLE
-                }
+                applyAnnouncement(message.optString("announcement", ""))
             }
 
             "registered" -> {
@@ -761,8 +765,7 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
 
             "announcement" -> {
                 val text = message.optString("text", "")
-                announcementText.text = text
-                announcementText.visibility = if (text.isNotEmpty()) View.VISIBLE else View.GONE
+                applyAnnouncement(text)
                 toast(if (text.isNotEmpty()) "公告：$text" else "公告已清除")
             }
 
@@ -791,6 +794,47 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
         directoryPanel.visibility = View.GONE
         callPanel.visibility = View.GONE
         incomingPanel.visibility = View.GONE
+        applyAnnouncement(announcementValue)
+    }
+
+    /** 公告只在登录页可见时渲染，避免切页时闪一下 */
+    private fun applyAnnouncement(text: String) {
+        announcementValue = text
+        if (loginPanel.visibility != View.VISIBLE) return
+        announcementText.text = text
+        announcementText.visibility = if (text.isEmpty()) View.GONE else View.VISIBLE
+    }
+
+    /** 启动时主动拉取一次公告，未连接 WebSocket 也能看到 */
+    private fun fetchAnnouncement() {
+        val server = prefs.server.trim()
+        if (server.isEmpty()) return
+        val base = if (server.startsWith("http://") || server.startsWith("https://")) {
+            server.trimEnd('/')
+        } else {
+            "http://" + server.trimEnd('/')
+        }
+        try {
+            val request = Request.Builder().url("$base/api/config").build()
+            OkHttpClient().newCall(request).enqueue(object : Callback {
+                override fun onFailure(call: Call, e: IOException) {
+                }
+
+                override fun onResponse(call: Call, response: Response) {
+                    response.use { res ->
+                        val body = res.body?.string().orEmpty()
+                        if (body.isBlank()) return
+                        val text = try {
+                            JSONObject(body).optString("announcement", "")
+                        } catch (t: Throwable) {
+                            ""
+                        }
+                        runOnUiThread { applyAnnouncement(text) }
+                    }
+                }
+            })
+        } catch (ignored: Throwable) {
+        }
     }
 
     private fun showDirectory() {
