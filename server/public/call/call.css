@@ -218,6 +218,7 @@ input:focus {
   color: #fcd34d;
   font-size: 13px;
   line-height: 1.6;
+  text-align: center;
 }
 
 #myName {
