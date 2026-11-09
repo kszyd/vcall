@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>VCall 管理后台</title>
   <link rel="icon" href="/admin/favicon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="/admin/app.css?v=1.0.1" />
+  <link rel="stylesheet" href="/admin/app.css?v=2.5.0" />
 </head>
 <body>
   <!-- 登录 -->
@@ -72,52 +72,50 @@
         </article>
       </section>
 
-      <section class="grid-2">
+      <section class="card trend-card">
+        <div class="card-head">
+          <h2>在线趋势</h2>
+          <span class="muted small">最近 10 分钟</span>
+        </div>
+        <div class="chart-wrap">
+          <svg id="chart" viewBox="0 0 1200 220" preserveAspectRatio="none" aria-label="在线设备趋势图"></svg>
+          <div class="chart-legend">
+            <span><i class="dot blue"></i>在线设备</span>
+            <span><i class="dot cyan"></i>通话数</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="grid-2 even">
         <article class="card">
           <div class="card-head">
-            <h2>在线趋势</h2>
-            <span class="muted small">最近 10 分钟</span>
+            <h2>客户端公告</h2>
+            <span class="muted small">推送到在线终端</span>
           </div>
-          <div class="chart-wrap">
-            <svg id="chart" viewBox="0 0 600 160" preserveAspectRatio="none" aria-label="在线设备趋势图"></svg>
-            <div class="chart-legend">
-              <span><i class="dot blue"></i>在线设备</span>
-              <span><i class="dot cyan"></i>通话数</span>
-            </div>
-          </div>
-        </article>
-
-        <div class="stack">
-          <article class="card">
-            <div class="card-head">
-              <h2>客户端公告</h2>
-              <span class="muted small">推送到在线终端</span>
-            </div>
-            <label class="field">
-              <span>公告内容（留空则清除公告）</span>
+          <label class="field">
+            <span>公告内容（留空则清除公告）</span>
+            <div class="row inline">
               <input id="announcement" type="text" maxlength="200" placeholder="例如：今晚 22:00 维护" />
-            </label>
-            <div class="row end">
               <button class="btn primary" id="pushAnnouncement" type="button">推送到终端</button>
             </div>
-            <p class="hint muted" id="announcementHint">点击后立即推送到所有在线终端，并写入数据目录。</p>
-          </article>
+          </label>
+          <p class="hint muted" id="announcementHint">点击后立即推送到所有在线终端，并写入数据目录。</p>
+        </article>
 
-          <article class="card">
-            <div class="card-head">
-              <h2>通话设置</h2>
-              <span class="muted small">保存后生效</span>
-            </div>
-            <label class="field">
-              <span>单次通话最大人数（2-12）</span>
+        <article class="card">
+          <div class="card-head">
+            <h2>通话设置</h2>
+            <span class="muted small">保存后生效</span>
+          </div>
+          <label class="field">
+            <span>单次通话最大人数（2-12）</span>
+            <div class="row inline">
               <input id="maxMembers" type="number" min="2" max="12" step="1" />
-            </label>
-            <div class="row end">
               <button class="btn primary" id="saveLimits" type="button">保存</button>
             </div>
-            <p class="hint muted" id="limitsHint">保存后立即生效，影响之后发起的通话。</p>
-          </article>
-        </div>
+          </label>
+          <p class="hint muted" id="limitsHint">保存后立即生效，影响之后发起的通话。</p>
+        </article>
       </section>
 
       <section class="card">
@@ -203,6 +201,6 @@
   </div>
 
   <div id="toast" class="toast hidden"></div>
-  <script src="/admin/app.js?v=1.0.1"></script>
+  <script src="/admin/app.js?v=2.5.0"></script>
 </body>
 </html>

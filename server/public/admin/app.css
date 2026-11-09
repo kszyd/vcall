@@ -340,6 +340,19 @@ main > * {
   align-items: start;
 }
 
+.grid-2.even {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.grid-2.even > .card {
+  display: flex;
+  flex-direction: column;
+}
+
+.grid-2.even .hint {
+  margin-top: 12px;
+}
+
 .grid-2 > * {
   min-width: 0;
 }
@@ -366,7 +379,7 @@ main > * {
 
 #chart {
   width: 100%;
-  height: 190px;
+  height: 180px;
   display: block;
   border-radius: 10px;
   background: linear-gradient(180deg, rgba(34, 211, 238, 0.05), transparent);
@@ -405,6 +418,22 @@ main > * {
 .row.end {
   justify-content: flex-end;
   margin-top: 12px;
+}
+
+.row.inline {
+  align-items: stretch;
+  margin-top: 6px;
+}
+
+.row.inline input {
+  flex: 1;
+  min-width: 0;
+}
+
+.row.inline .btn {
+  padding-top: 0;
+  padding-bottom: 0;
+  white-space: nowrap;
 }
 
 .table-wrap {

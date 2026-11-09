@@ -311,10 +311,25 @@
 
   function renderMetrics(samples) {
     const svg = $('chart');
-    const width = 600;
-    const height = 160;
+    const width = 1200;
+    const height = 220;
     const pad = 8;
     svg.textContent = '';
+
+    // 背景网格线，避免数据少时画面过空
+    for (let i = 1; i <= 3; i += 1) {
+      const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      const y = (height / 4) * i;
+      line.setAttribute('x1', pad);
+      line.setAttribute('x2', width - pad);
+      line.setAttribute('y1', y);
+      line.setAttribute('y2', y);
+      line.setAttribute('stroke', 'rgba(31, 45, 71, 0.85)');
+      line.setAttribute('stroke-width', '1');
+      line.setAttribute('stroke-dasharray', '4 6');
+      svg.appendChild(line);
+    }
+
     const data = (samples || []).slice(-120);
     if (data.length < 2) {
       const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
