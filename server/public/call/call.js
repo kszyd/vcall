@@ -75,37 +75,53 @@
       localStorage.setItem('vcall.server', $('server').value.trim());
       localStorage.setItem('vcall.name', name);
 
-      if (!state.localStream) {
-        try {
-          state.localStream = await openMedia(true);
-          $('localVideo').srcObject = state.localStream;
-        } catch (err) {
-          if (err && err.code === 'insecure') {
-            state.receiveOnly = true;
-            $('secureHint').classList.remove('hidden');
-          } else if (err && err.name === 'NotAllowedError') {
-            state.receiveOnly = true;
-            $('secureHint').classList.remove('hidden');
-            $('secureHint').textContent = '摄像头/麦克风权限被拒绝，将以仅接收模式加入。';
-          } else {
-            throw err;
-          }
-        }
-      }
-
       const config = await fetch(location.origin + '/api/config')
         .then((r) => r.json())
         .catch(() => ({ iceServers: [] }));
       state.iceServers = config.iceServers || [];
 
       const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-      const ws = new WebSocket(proto + '://' + host + '/ws');
+      let wsHost = host;
+      if (proto === 'wss') {
+        // HTTPS 页面必须走 9443（TLS），9002 只有明文 ws
+        const idx = host.lastIndexOf(':');
+        const onlyHost = idx === -1 ? host : host.slice(0, idx);
+        const port = idx === -1 ? '' : host.slice(idx + 1);
+        if (!port || port === '9002') wsHost = onlyHost + ':9443';
+      }
+      const ws = new WebSocket(proto + '://' + wsHost + '/ws');
       state.ws = ws;
       bindSocket(ws);
     } catch (err) {
       $('loginError').textContent = '连接失败：' + (err && err.message ? err.message : err);
       btn.disabled = false;
       btn.textContent = '进入通讯录';
+    }
+  }
+
+  /**
+   * 进入通讯录时不采集，真正发起或接听通话时才打开摄像头/麦克风。
+   */
+  async function ensureMedia() {
+    if (state.localStream) return true;
+    if (state.receiveOnly) return false;
+    try {
+      state.localStream = await openMedia($('joinAudio').checked);
+      state.micOn = $('joinAudio').checked;
+      $('localVideo').srcObject = state.localStream;
+      $('secureHint').classList.add('hidden');
+      return true;
+    } catch (err) {
+      state.receiveOnly = true;
+      $('secureHint').classList.remove('hidden');
+      if (err && err.code === 'insecure') {
+        toast('HTTP 下无法使用摄像头，将以仅接收模式通话');
+      } else if (err && err.name === 'NotAllowedError') {
+        toast('摄像头/麦克风权限被拒绝，将以仅接收模式通话');
+      } else {
+        toast('无法打开摄像头/麦克风：' + (err && err.message ? err.message : err));
+      }
+      return false;
     }
   }
 
@@ -419,11 +435,13 @@
     }
   }
 
-  function invite(targets) {
+  async function invite(targets) {
     if (!targets.length) {
       toast('请先选择终端');
       return;
     }
+    // 真正发起通话时才申请摄像头/麦克风
+    await ensureMedia();
     send({ type: 'call-invite', targets, video: true });
     state.selected.clear();
     renderDirectory();
@@ -453,6 +471,17 @@
     }, 1000);
   }
 
+  function stopMedia() {
+    if (state.localStream) {
+      for (const track of state.localStream.getTracks()) track.stop();
+      state.localStream = null;
+    }
+    $('localVideo').srcObject = null;
+    state.receiveOnly = false;
+    updateMicButton();
+    updateCamButton();
+  }
+
   function leaveCall(silent) {
     if (state.callId) send({ type: 'call-leave', callId: state.callId });
     state.callId = null;
@@ -461,6 +490,8 @@
     clearInterval(state.statsTimer);
     for (const id of [...state.peers.keys()]) removePeer(id);
     $('videoGrid').textContent = '';
+    // 挂断即释放摄像头/麦克风，避免指示灯常亮
+    stopMedia();
     $('call').classList.add('hidden');
     $('directory').classList.remove('hidden');
     $('callTimer').textContent = '00:00';
@@ -694,12 +725,15 @@
     .then((cfg) => setAnnouncement(cfg.announcement || ''))
     .catch(() => {});
   $('logoutBtn').addEventListener('click', () => {
+    stopMedia();
     if (state.ws) state.ws.close();
   });
   $('searchInput').addEventListener('input', renderDirectory);
   $('groupBtn').addEventListener('click', () => invite([...state.selected]));
-  $('acceptBtn').addEventListener('click', () => {
+  $('acceptBtn').addEventListener('click', async () => {
     if (!state.callId) return;
+    // 接听时才申请摄像头/麦克风
+    await ensureMedia();
     send({ type: 'call-accept', callId: state.callId });
     hideIncoming();
   });
@@ -714,6 +748,7 @@
   $('hangupBtn').addEventListener('click', () => leaveCall());
 
   window.addEventListener('beforeunload', () => {
+    stopMedia();
     if (state.ws) state.ws.close();
   });
 })();

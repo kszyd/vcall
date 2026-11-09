@@ -547,7 +547,7 @@ td.empty {
 }
 
 .logs {
-  max-height: 300px;
+  max-height: 150px;
   overflow-y: auto;
   font-family: "Cascadia Code", Consolas, monospace;
   font-size: 12px;

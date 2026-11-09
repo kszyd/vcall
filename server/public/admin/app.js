@@ -464,6 +464,12 @@
 
   $('loginForm').addEventListener('submit', login);
   $('logoutBtn').addEventListener('click', () => logout(false));
+  // 网页通话走 HTTPS（9443），按当前访问的主机名自动拼接
+  const webCallLink = $('webCallLink');
+  if (webCallLink) {
+    const host = location.hostname || '192.168.199.100';
+    webCallLink.href = 'https://' + host + ':9443/call';
+  }
   $('pushAnnouncement').addEventListener('click', pushAnnouncement);
   $('saveLimits').addEventListener('click', saveLimits);
   $('refreshLogs').addEventListener('click', refresh);
