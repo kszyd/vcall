@@ -237,13 +237,26 @@ class CallSession(
     }
 
     /**
-     * 在视频 m 行后加带宽提示，提升大屏清晰度（默认实现码率偏低）。
+     * 把视频码率上限提到 6 Mbps，并保留 WebRTC 的带宽自适应：
+     * 网络好时按 1080p 高码率发送，带宽不足时自动降码率/分辨率。
      */
     private fun tuneSdp(sdp: String): String {
         val lines = sdp.split("\r\n").toMutableList()
         val index = lines.indexOfFirst { it.startsWith("m=video") }
         if (index >= 0 && !lines.getOrNull(index + 1).orEmpty().startsWith("b=")) {
-            lines.add(index + 1, "b=AS:4000")
+            lines.add(index + 1, "b=AS:6000")
+        }
+
+        var inVideo = false
+        for (i in lines.indices) {
+            val line = lines[i]
+            if (line.startsWith("m=video")) {
+                inVideo = true
+            } else if (line.startsWith("m=")) {
+                inVideo = false
+            } else if (inVideo && line.startsWith("a=fmtp:") && !line.contains("x-google-max-bitrate")) {
+                lines[i] = line + ";x-google-max-bitrate=6000;x-google-min-bitrate=300"
+            }
         }
         return lines.joinToString("\r\n")
     }

@@ -312,7 +312,7 @@
   function renderMetrics(samples) {
     const svg = $('chart');
     const width = 1200;
-    const height = 220;
+    const height = 160;
     const pad = 8;
     svg.textContent = '';
 
