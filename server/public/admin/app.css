@@ -353,16 +353,16 @@ main > * {
   margin-top: 12px;
 }
 
-/* 在线终端 / 通话记录：同高，内容超出时内部滚动 */
+/* 在线终端 / 通话记录：固定同高，内容超出时内部滚动 */
 .grid-2.bottom > .card {
-  min-height: 420px;
+  height: 320px;
   display: flex;
   flex-direction: column;
 }
 
 .grid-2.bottom .table-wrap {
   flex: 1;
-  max-height: 330px;
+  min-height: 0;
   overflow-y: auto;
 }
 
