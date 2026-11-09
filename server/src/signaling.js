@@ -235,9 +235,18 @@ class SignalingService {
     }
 
     const max = this.config.maxCallMembers;
-    if (ids.length + 1 > max) {
-      this._sendError(caller, 'too_many', `最多同时通话 ${max} 人`);
-      return;
+
+    // 目标全部处于同一个进行中的通话 -> 直接加入该通话（可随时进入）
+    const busyInCall = ids
+      .map((id) => this.terminals.get(id))
+      .filter((t) => t && t.registered && t.state === 'busy' && t.callId);
+    const callIds = new Set(busyInCall.map((t) => t.callId));
+    if (busyInCall.length === ids.length && callIds.size === 1) {
+      const targetCall = this.calls.get([...callIds][0]);
+      if (targetCall) {
+        this._joinExistingCall(caller, targetCall);
+        return;
+      }
     }
 
     const valid = [];
@@ -255,6 +264,10 @@ class SignalingService {
     }
     if (!valid.length) {
       this._sendError(caller, 'no_available', '对方正忙或已离线');
+      return;
+    }
+    if (valid.length + 1 > max) {
+      this._sendError(caller, 'too_many', `最多同时通话 ${max} 人`);
       return;
     }
 
@@ -303,6 +316,49 @@ class SignalingService {
       call: call.id,
       from: caller.name,
       targets: valid.map((t) => t.name),
+    });
+    this._broadcastDirectory();
+  }
+
+  /** 已注册终端加入正在进行的通话（第三方可随时进入） */
+  _joinExistingCall(caller, call) {
+    if (call.members.has(caller.id)) {
+      this._sendError(caller, 'already_in_call', '你已在该通话中');
+      return;
+    }
+    const max = this.config.maxCallMembers;
+    if (call.members.size + 1 > max) {
+      this._sendError(caller, 'too_many', `该通话已达 ${max} 人上限`);
+      return;
+    }
+
+    call.members.set(caller.id, caller);
+    caller.state = 'busy';
+    caller.callId = call.id;
+    if (!call.startedAt && call.members.size >= 2) {
+      call.startedAt = Date.now();
+      this.totalCalls += 1;
+    }
+
+    const others = [...call.members.values()].filter((t) => t.id !== caller.id);
+    this._send(caller, {
+      type: 'call-joined',
+      callId: call.id,
+      video: call.video,
+      members: others.map((t) => this._publicTerminal(t)),
+    });
+    for (const member of others) {
+      this._send(member, {
+        type: 'call-member-joined',
+        callId: call.id,
+        member: this._publicTerminal(caller),
+      });
+    }
+
+    this.logger.info('终端加入通话', {
+      call: call.id,
+      terminal: caller.name,
+      members: call.members.size,
     });
     this._broadcastDirectory();
   }

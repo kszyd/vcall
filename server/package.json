@@ -1,6 +1,6 @@
 {
   "name": "vcall-server",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "private": true,
   "description": "VCall 视频通话信令服务与 Web 管理后台（零第三方依赖）",
   "main": "src/index.js",

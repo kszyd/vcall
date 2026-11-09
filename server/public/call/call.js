@@ -336,10 +336,7 @@
           renderDirectory();
           return;
         }
-        if (device.state !== 'idle') {
-          toast('对方正在通话中');
-          return;
-        }
+        // 对方通话中时服务器会把本机直接加入该通话
         invite([device.id]);
       });
 

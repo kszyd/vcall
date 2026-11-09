@@ -208,14 +208,26 @@ async function main() {
   const busyError = await a.waitType('error');
   check('通话中不能再次发起呼叫', Boolean(busyError && busyError.code === 'busy'));
 
+  console.log('\n[5] 第三方随时加入通话');
+  c.clear();
   c.send({ type: 'call-invite', targets: [selfA.id], video: true });
-  const cError = await c.waitType('error');
-  check('不能呼叫通话中的终端', Boolean(cError && cError.code === 'no_available'));
+  const cJoined = await c.waitType('call-joined');
+  check('第三方加入进行中的通话', Boolean(cJoined && cJoined.members.some((m) => m.id === selfA.id)));
+  const aSawC = await waitFor(
+    () => a.findAll('call-member-joined').find((m) => m.member.id === selfC.id),
+    4000
+  );
+  check('原成员收到新成员加入', Boolean(aSawC));
 
   console.log('\n[6] 离开与结束');
+  c.send({ type: 'call-leave', callId: cJoined.callId });
+  await sleep(200);
   b.send({ type: 'call-leave', callId });
-  const left = await a.waitType('call-member-left');
-  check('A 收到成员离开', Boolean(left && left.id === selfB.id));
+  const left = await waitFor(
+    () => a.findAll('call-member-left').find((m) => m.id === selfB.id),
+    4000
+  );
+  check('A 收到成员离开', Boolean(left));
   const ended = await a.waitType('call-ended');
   check('剩余 1 人时通话结束', Boolean(ended));
 

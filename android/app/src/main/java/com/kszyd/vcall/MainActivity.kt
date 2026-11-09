@@ -237,6 +237,26 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
+    private val hideControlsRunnable = Runnable {
+        if (!inCall) return@Runnable
+        bottomBar.animate().alpha(0f).setDuration(180).withEndAction {
+            bottomBar.visibility = View.GONE
+        }.start()
+        callTopBar.animate().alpha(0f).setDuration(180).withEndAction {
+            callTopBar.visibility = View.GONE
+        }.start()
+    }
+
+    private fun showControls() {
+        if (!inCall) return
+        callTopBar.visibility = View.VISIBLE
+        bottomBar.visibility = View.VISIBLE
+        callTopBar.alpha = 1f
+        bottomBar.alpha = 1f
+        handler.removeCallbacks(hideControlsRunnable)
+        handler.postDelayed(hideControlsRunnable, 5000)
+    }
+
     private fun setupDrag(target: View) {
         target.setOnTouchListener { view, event ->
             val params = view.layoutParams as FrameLayout.LayoutParams
@@ -269,7 +289,10 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
                 }
 
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    if (!dragging) toggleMainView()
+                    if (!dragging) {
+                        // 小窗点击：交换大小画面；大画面点击：唤出控制栏
+                        if (view.width <= dp(200)) toggleMainView() else showControls()
+                    }
                     true
                 }
 
@@ -285,6 +308,7 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
         }
         swapped = !swapped
         applyCallLayout()
+        showControls()
     }
 
     private fun applyCallLayout() {
@@ -397,10 +421,7 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
             .setTitle(displayName(terminal, aliasMap()))
             .setItems(items) { _, which ->
                 when (which) {
-                    0 -> {
-                        if (terminal.state == "idle") invite(listOf(terminal.id))
-                        else toast(getString(R.string.target_busy))
-                    }
+                    0 -> invite(listOf(terminal.id))
                     1 -> promptAlias(terminal)
                     2 -> {
                         val map = aliasMap()
@@ -730,14 +751,11 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
             }
 
             item.setOnClickListener {
-                if (terminal.state != "idle") {
-                    toast(getString(R.string.target_busy))
-                    return@setOnClickListener
-                }
                 if (selected.isNotEmpty()) {
                     if (selected.contains(terminal.id)) selected.remove(terminal.id) else selected.add(terminal.id)
                     renderTerminals()
                 } else {
+                    // 对方通话中时，服务器会把本机直接加入该通话
                     invite(listOf(terminal.id))
                 }
             }
@@ -845,6 +863,7 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
         applyCallLayout()
         updateMicUi()
         updateSpeakerUi()
+        showControls()
         if (isTv) hangupButton.requestFocus()
     }
 
@@ -861,6 +880,13 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
         swapped = false
         handler.removeCallbacks(ticker)
         handler.removeCallbacks(statsTicker)
+        handler.removeCallbacks(hideControlsRunnable)
+        callTopBar.animate().cancel()
+        bottomBar.animate().cancel()
+        callTopBar.alpha = 1f
+        bottomBar.alpha = 1f
+        callTopBar.visibility = View.VISIBLE
+        bottomBar.visibility = View.VISIBLE
         session?.closeAll()
         updateMicUi()
         showDirectory()
@@ -921,6 +947,7 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
         session?.setMicrophoneEnabled(micOn)
         updateMicUi()
         sendState()
+        showControls()
     }
 
     private fun toggleSpeaker() {
@@ -928,11 +955,13 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
         prefs.speakerOn = speakerOn
         session?.setSpeakerphone(speakerOn)
         updateSpeakerUi()
+        showControls()
     }
 
     private fun switchCamera() {
         if (session?.switchCamera() == true) showHint("已切换摄像头")
         else showHint("当前设备不支持切换摄像头")
+        showControls()
     }
 
     private fun updateMicUi() {

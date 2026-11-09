@@ -113,7 +113,12 @@ class CallSession(
             track.addSink(localRenderer)
             videoTrack = track
             capturer.initialize(surfaceHelper, context, source.capturerObserver)
-            capturer.startCapture(1280, 720, 30)
+            // 优先 1080p，WebRTC 会按设备实际支持选择最接近的采集格式
+            capturer.startCapture(1920, 1080, 30)
+            try {
+                source.adaptOutputFormat(1920, 1080, 30)
+            } catch (ignored: Throwable) {
+            }
             videoCapturer = capturer
             hasVideo = true
         } catch (t: Throwable) {
@@ -231,6 +236,18 @@ class CallSession(
         }
     }
 
+    /**
+     * 在视频 m 行后加带宽提示，提升大屏清晰度（默认实现码率偏低）。
+     */
+    private fun tuneSdp(sdp: String): String {
+        val lines = sdp.split("\r\n").toMutableList()
+        val index = lines.indexOfFirst { it.startsWith("m=video") }
+        if (index >= 0 && !lines.getOrNull(index + 1).orEmpty().startsWith("b=")) {
+            lines.add(index + 1, "b=AS:4000")
+        }
+        return lines.joinToString("\r\n")
+    }
+
     fun createOffer(peerId: String, name: String, onSdp: (String?) -> Unit) {
         val pc = try {
             ensurePeer(peerId, name)
@@ -246,10 +263,11 @@ class CallSession(
         pc.createOffer(object : SimpleSdpObserver() {
             override fun onCreateSuccess(sdp: SessionDescription?) {
                 if (sdp == null) return onSdp(null)
+                val tuned = SessionDescription(sdp.type, tuneSdp(sdp.description))
                 pc.setLocalDescription(object : SimpleSdpObserver() {
-                    override fun onSetSuccess() = onSdp(sdp.description)
+                    override fun onSetSuccess() = onSdp(tuned.description)
                     override fun onSetFailure(error: String?) = onSdp(null)
-                }, sdp)
+                }, tuned)
             }
 
             override fun onCreateFailure(error: String?) = onSdp(null)
@@ -269,10 +287,11 @@ class CallSession(
                 pc.createAnswer(object : SimpleSdpObserver() {
                     override fun onCreateSuccess(answer: SessionDescription?) {
                         if (answer == null) return onAnswer(null)
+                        val tuned = SessionDescription(answer.type, tuneSdp(answer.description))
                         pc.setLocalDescription(object : SimpleSdpObserver() {
-                            override fun onSetSuccess() = onAnswer(answer.description)
+                            override fun onSetSuccess() = onAnswer(tuned.description)
                             override fun onSetFailure(error: String?) = onAnswer(null)
-                        }, answer)
+                        }, tuned)
                     }
 
                     override fun onCreateFailure(error: String?) = onAnswer(null)
