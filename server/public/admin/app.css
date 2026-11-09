@@ -355,7 +355,7 @@ main > * {
 
 /* 在线终端 / 通话记录：固定同高，内容超出时内部滚动 */
 .grid-2.bottom > .card {
-  height: 260px;
+  height: 200px;
   display: flex;
   flex-direction: column;
 }
