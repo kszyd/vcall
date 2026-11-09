@@ -96,6 +96,16 @@
                     android:inputType="text"
                     android:maxLength="24" />
 
+                <CheckBox
+                    android:id="@+id/wideAngleCheck"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:buttonTint="@color/wechat_green"
+                    android:text="@string/wide_angle"
+                    android:textColor="@color/text_muted"
+                    android:textSize="13sp" />
+
                 <Button
                     android:id="@+id/joinButton"
                     style="@style/VCallButton.Primary"

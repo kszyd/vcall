@@ -12,6 +12,7 @@
     <string name="join_room">进入通讯录</string>
     <string name="joining">正在连接…</string>
     <string name="setup_hint">同一服务器下的终端会自动出现在通讯录中。遥控器方向键移动焦点，确认键操作。</string>
+    <string name="wide_angle">广角模式（视野更宽，720p）</string>
 
     <string name="directory_title">通讯录</string>
     <string name="online_terminals">在线终端</string>

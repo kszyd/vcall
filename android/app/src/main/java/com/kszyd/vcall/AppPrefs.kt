@@ -30,6 +30,11 @@ class AppPrefs(context: Context) {
         get() = prefs.getString(KEY_ALIASES, "{}") ?: "{}"
         set(value) = prefs.edit().putString(KEY_ALIASES, value).apply()
 
+    /** 广角模式：用 720p 采集，视场角通常比 1080p 裁剪模式更宽 */
+    var wideAngle: Boolean
+        get() = prefs.getBoolean(KEY_WIDE_ANGLE, false)
+        set(value) = prefs.edit().putBoolean(KEY_WIDE_ANGLE, value).apply()
+
     companion object {
         const val DEFAULT_SERVER = "192.168.199.100:9002"
         private const val KEY_SERVER = "server"
@@ -37,5 +42,6 @@ class AppPrefs(context: Context) {
         private const val KEY_DEVICE_ID = "deviceId"
         private const val KEY_SPEAKER = "speaker"
         private const val KEY_ALIASES = "aliases"
+        private const val KEY_WIDE_ANGLE = "wideAngle"
     }
 }

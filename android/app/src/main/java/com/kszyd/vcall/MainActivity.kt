@@ -92,6 +92,7 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
     private lateinit var joinButton: Button
     private lateinit var setupStatus: TextView
     private lateinit var announcementText: TextView
+    private lateinit var wideAngleCheck: CheckBox
 
     private lateinit var myAvatar: TextView
     private lateinit var myName: TextView
@@ -173,6 +174,7 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
         joinButton = findViewById(R.id.joinButton)
         setupStatus = findViewById(R.id.setupStatus)
         announcementText = findViewById(R.id.announcementText)
+        wideAngleCheck = findViewById(R.id.wideAngleCheck)
 
         myAvatar = findViewById(R.id.myAvatar)
         myName = findViewById(R.id.myName)
@@ -213,6 +215,7 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
         serverInput.setText(prefs.server)
         nameInput.setText(prefs.name.ifEmpty { Build.MODEL ?: "VCall" })
         speakerOn = prefs.speakerOn
+        wideAngleCheck.isChecked = prefs.wideAngle
         updateMicUi()
         updateSpeakerUi()
     }
@@ -222,6 +225,7 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
         logoutButton.setOnClickListener { logout() }
         callSelectedButton.setOnClickListener { inviteSelected() }
         myName.setOnClickListener { editNickname() }
+        wideAngleCheck.setOnCheckedChangeListener { _, checked -> prefs.wideAngle = checked }
         searchInput.addTextChangedListenerSimple { renderTerminals() }
         micButton.setOnClickListener { toggleMic() }
         switchButton.setOnClickListener { switchCamera() }
@@ -836,7 +840,7 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
         created.onError = { message -> runOnUiThread { showHint(message) } }
         session = created
 
-        if (!created.startLocalMedia()) {
+        if (!created.startLocalMedia(prefs.wideAngle)) {
             showHint(getString(R.string.no_camera))
         }
     }

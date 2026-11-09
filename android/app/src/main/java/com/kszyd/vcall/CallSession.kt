@@ -93,14 +93,14 @@ class CallSession(
         iceServers = servers
     }
 
-    fun startLocalMedia(): Boolean {
+    fun startLocalMedia(wideAngle: Boolean = false): Boolean {
         if (released) return false
-        startVideoCapture()
+        startVideoCapture(wideAngle)
         startAudio()
         return hasVideo
     }
 
-    private fun startVideoCapture() {
+    private fun startVideoCapture(wideAngle: Boolean) {
         val capturer = createCapturer(frontCamera) ?: run {
             hasVideo = false
             return
@@ -114,10 +114,12 @@ class CallSession(
             track.addSink(localRenderer)
             videoTrack = track
             capturer.initialize(surfaceHelper, context, source.capturerObserver)
-            // 优先 1080p，WebRTC 会按设备实际支持选择最接近的采集格式
-            capturer.startCapture(1920, 1080, 30)
+            // 广角模式用 720p：多数摄像头 720p 为全视场采样，视野比 1080p 裁剪模式更宽
+            val targetWidth = if (wideAngle) 1280 else 1920
+            val targetHeight = if (wideAngle) 720 else 1080
+            capturer.startCapture(targetWidth, targetHeight, 30)
             try {
-                source.adaptOutputFormat(1920, 1080, 30)
+                source.adaptOutputFormat(targetWidth, targetHeight, 30)
             } catch (ignored: Throwable) {
             }
             videoCapturer = capturer
