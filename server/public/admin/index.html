@@ -28,7 +28,6 @@
       </label>
       <button type="submit" class="btn primary block" id="loginBtn">登录</button>
       <p id="loginError" class="error-text" role="alert"></p>
-      <p class="hint muted">默认账号 admin / vcall@2026，请在部署时通过环境变量修改。</p>
     </form>
   </div>
 
@@ -98,7 +97,9 @@
               <span>公告内容（留空则清除公告）</span>
               <input id="announcement" type="text" maxlength="200" placeholder="例如：今晚 22:00 维护" />
             </label>
-            <button class="btn primary block" id="pushAnnouncement" type="button">推送到终端</button>
+            <div class="row end">
+              <button class="btn primary" id="pushAnnouncement" type="button">推送到终端</button>
+            </div>
             <p class="hint muted" id="announcementHint">点击后立即推送到所有在线终端，并写入数据目录。</p>
           </article>
 
@@ -111,7 +112,9 @@
               <span>单次通话最大人数（2-12）</span>
               <input id="maxMembers" type="number" min="2" max="12" step="1" />
             </label>
-            <button class="btn primary block" id="saveLimits" type="button">保存</button>
+            <div class="row end">
+              <button class="btn primary" id="saveLimits" type="button">保存</button>
+            </div>
             <p class="hint muted" id="limitsHint">保存后立即生效，影响之后发起的通话。</p>
           </article>
         </div>

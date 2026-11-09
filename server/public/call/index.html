@@ -31,6 +31,7 @@
 
       <button id="connectBtn" class="btn primary block" type="button">进入通讯录</button>
       <p id="loginError" class="error"></p>
+      <p id="announcement" class="notice hidden"></p>
       <p id="secureHint" class="announce hidden">当前为 HTTP 访问，浏览器无法使用摄像头/麦克风，可接听并观看对方画面；双向通话请使用 VCall APK。</p>
       <p class="hint muted">同一服务器下的终端会自动出现在通讯录中。</p>
     </div>
@@ -42,12 +43,14 @@
       <div class="me">
         <div class="avatar" id="myAvatar">V</div>
         <div class="me-info">
-          <h1 id="myName">我</h1>
+          <h1 id="myName" title="点击修改昵称">我</h1>
           <p class="muted small" id="myState">在线</p>
         </div>
       </div>
       <button id="logoutBtn" class="btn ghost small" type="button">退出</button>
     </header>
+
+    <div id="noticeBar" class="notice hidden"></div>
 
     <div class="list-tools">
       <input id="searchInput" class="search" type="text" placeholder="搜索终端" />

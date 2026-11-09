@@ -111,19 +111,7 @@
 
   function bindSocket(ws) {
     ws.onopen = () => {
-      ws.send(
-        JSON.stringify({
-          type: 'register',
-          name: state.name,
-          deviceId: localStorage.getItem('vcall.deviceId') || '',
-          device: {
-            platform: 'web',
-            os: navigator.platform || 'browser',
-            model: (navigator.userAgentData && navigator.userAgentData.platform) || navigator.userAgent.slice(0, 40),
-            appVersion: 'web',
-          },
-        })
-      );
+      ws.send(JSON.stringify(buildRegister()));
     };
 
     ws.onmessage = (event) => {
@@ -155,6 +143,7 @@
     switch (msg.type) {
       case 'welcome':
         state.selfId = msg.id;
+        setAnnouncement(msg.announcement || '');
         break;
 
       case 'registered':
@@ -162,7 +151,7 @@
         localStorage.setItem('vcall.deviceId', msg.self.id);
         $('myName').textContent = msg.self.name;
         $('myAvatar').textContent = initial(msg.self.name);
-        $('myState').textContent = '在线 · ID ' + msg.self.id;
+        $('myState').textContent = 'ID ' + msg.self.id + ' · 点击昵称可修改';
         showDirectory(true);
         break;
 
@@ -249,7 +238,7 @@
         break;
 
       case 'announcement':
-        $('announcement').textContent = msg.text || '';
+        setAnnouncement(msg.text || '');
         toast(msg.text ? '公告：' + msg.text : '公告已清除');
         break;
 
@@ -275,11 +264,86 @@
     $('directory').classList.toggle('hidden', !show);
   }
 
+  /* ------------------------------ 昵称 / 备注 / 公告 ------------------------------ */
+
+  function aliasMap() {
+    try {
+      return JSON.parse(localStorage.getItem('vcall.aliases') || '{}') || {};
+    } catch (err) {
+      return {};
+    }
+  }
+
+  function displayName(device, aliases) {
+    const alias = aliases && aliases[device.id];
+    return alias && alias.trim() ? alias : device.name || '未命名';
+  }
+
+  function promptAlias(device) {
+    const current = aliasMap()[device.id] || '';
+    const value = window.prompt('备注「' + (device.name || '') + '」（留空清除）', current);
+    if (value === null) return;
+    const map = aliasMap();
+    if (value.trim()) map[device.id] = value.trim();
+    else delete map[device.id];
+    localStorage.setItem('vcall.aliases', JSON.stringify(map));
+    renderDirectory();
+    toast(value.trim() ? '备注已保存' : '备注已清除');
+  }
+
+  function buildRegister() {
+    return {
+      type: 'register',
+      name: state.name,
+      deviceId: localStorage.getItem('vcall.deviceId') || '',
+      device: {
+        platform: 'web',
+        os: navigator.platform || 'browser',
+        model: (navigator.userAgentData && navigator.userAgentData.platform) || navigator.userAgent.slice(0, 40),
+        appVersion: 'web',
+      },
+    };
+  }
+
+  function editNickname() {
+    const value = window.prompt('修改昵称', state.name || '');
+    if (value === null) return;
+    const name = value.trim();
+    if (!name) {
+      toast('昵称不能为空');
+      return;
+    }
+    state.name = name;
+    localStorage.setItem('vcall.name', name);
+    $('myName').textContent = name;
+    $('myAvatar').textContent = initial(name);
+    send(buildRegister());
+    toast('昵称已更新');
+  }
+
+  function setAnnouncement(text) {
+    state.announcement = text || '';
+    const login = $('announcement');
+    if (login) {
+      login.textContent = state.announcement;
+      login.classList.toggle('hidden', !state.announcement);
+    }
+    const bar = $('noticeBar');
+    if (bar) {
+      bar.textContent = state.announcement ? '公告：' + state.announcement : '';
+      bar.classList.toggle('hidden', !state.announcement);
+    }
+  }
+
   function renderDirectory() {
     const list = $('terminalList');
     list.textContent = '';
+    const aliases = aliasMap();
     const keyword = ($('searchInput').value || '').trim().toLowerCase();
-    const items = state.devices.filter((d) => !keyword || (d.name || '').toLowerCase().includes(keyword));
+    const items = state.devices.filter((d) => {
+      const shown = displayName(d, aliases).toLowerCase();
+      return !keyword || shown.includes(keyword) || (d.name || '').toLowerCase().includes(keyword);
+    });
     $('onlineCount').textContent = state.devices.length + ' 台';
     $('emptyHint').classList.toggle('hidden', items.length > 0);
 
@@ -289,14 +353,14 @@
 
       const avatar = document.createElement('div');
       avatar.className = 'avatar';
-      avatar.textContent = initial(device.name);
+      avatar.textContent = initial(displayName(device, aliases));
       li.appendChild(avatar);
 
       const info = document.createElement('div');
       info.className = 'terminal-info';
       const nameRow = document.createElement('div');
       nameRow.className = 'terminal-name';
-      nameRow.appendChild(document.createTextNode(device.name || '未命名'));
+      nameRow.appendChild(document.createTextNode(displayName(device, aliases)));
       if (device.isTv) {
         const tag = document.createElement('span');
         tag.className = 'tag tv';
@@ -313,9 +377,20 @@
 
       const sub = document.createElement('div');
       sub.className = 'terminal-sub';
-      sub.textContent = (device.platform === 'web' ? '网页' : '手机') + ' · ID ' + device.id;
+      const original = aliases[device.id] ? '原名 ' + (device.name || '') + ' · ' : '';
+      sub.textContent = original + (device.platform === 'web' ? '网页' : '手机') + ' · ID ' + device.id;
       info.appendChild(sub);
       li.appendChild(info);
+
+      const more = document.createElement('button');
+      more.type = 'button';
+      more.className = 'more';
+      more.textContent = '备注';
+      more.addEventListener('click', (event) => {
+        event.stopPropagation();
+        promptAlias(device);
+      });
+      li.appendChild(more);
 
       const check = document.createElement('div');
       check.className = 'check';
@@ -611,6 +686,7 @@
   if (!isSecure()) $('secureHint').classList.remove('hidden');
 
   $('connectBtn').addEventListener('click', connect);
+  $('myName').addEventListener('click', editNickname);
   $('logoutBtn').addEventListener('click', () => {
     if (state.ws) state.ws.close();
   });
