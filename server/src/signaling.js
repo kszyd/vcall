@@ -277,6 +277,7 @@ class SignalingService {
       createdAt: Date.now(),
       startedAt: 0,
       members: new Map([[caller.id, caller]]),
+      names: new Set([caller.name]),
       invited: new Map(),
     };
     this.calls.set(call.id, call);
@@ -333,6 +334,7 @@ class SignalingService {
     }
 
     call.members.set(caller.id, caller);
+    call.names.add(caller.name);
     caller.state = 'busy';
     caller.callId = call.id;
     if (!call.startedAt && call.members.size >= 2) {
@@ -378,6 +380,7 @@ class SignalingService {
     clearTimeout(invite.timer);
     call.invited.delete(terminal.id);
     call.members.set(terminal.id, terminal);
+    call.names.add(terminal.name);
     terminal.state = 'busy';
     terminal.callId = call.id;
     if (!call.startedAt && call.members.size >= 2) {
@@ -508,12 +511,20 @@ class SignalingService {
 
     if (call.startedAt) {
       const endedAt = Date.now();
+      const names = [...(call.names || [])].map((n) => (n || '').trim()).filter(Boolean);
+      if (!names.length) {
+        for (const m of call.members.values()) {
+          const n = (m.alias || m.name || '').trim();
+          if (n) names.push(n);
+        }
+      }
       this.history.unshift({
         id: call.id,
         startedAt: call.startedAt,
         endedAt,
         duration: Math.max(1, Math.round((endedAt - call.startedAt) / 1000)),
         members: call.members.size,
+        names,
       });
       if (this.history.length > 100) this.history.pop();
     }

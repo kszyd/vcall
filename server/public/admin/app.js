@@ -203,7 +203,13 @@
       const tr = el('tr');
 
       const tdId = el('td');
-      tdId.appendChild(el('span', 'room-id', call.id));
+      const memberNames = call.members.map((m) => m.alias || m.name || '未命名');
+      const whoText = memberNames.length
+        ? memberNames.slice(0, 3).join('、') + (memberNames.length > 3 ? ' 等 ' + memberNames.length + ' 人' : '')
+        : '呼叫中';
+      const whoEl = el('span', '', whoText);
+      whoEl.title = call.id;
+      tdId.appendChild(whoEl);
       tr.appendChild(tdId);
 
       const tdMembers = el('td');
@@ -301,7 +307,12 @@
     }
     for (const item of history.slice(0, 20)) {
       const tr = el('tr');
-      tr.appendChild(el('td', 'room-id', item.id));
+      const tdWho = el('td');
+      const whoNames = (item.names || []).filter(Boolean);
+      const whoEl = el('span', '', whoNames.length ? whoNames.join('、') : item.id);
+      whoEl.title = item.id;
+      tdWho.appendChild(whoEl);
+      tr.appendChild(tdWho);
       tr.appendChild(el('td', 'mono', formatClock(item.startedAt)));
       tr.appendChild(el('td', '', formatDuration(item.duration)));
       tr.appendChild(el('td', 'mono', String(item.members || 0)));

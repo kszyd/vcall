@@ -463,6 +463,23 @@ input:focus {
   background: #0b1220;
   z-index: 6;
   transform: scaleX(-1);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.local-video.dragging {
+  cursor: grabbing;
+}
+
+/* 切换到显示远端时不再镜像 */
+.local-video.remote-view {
+  transform: none;
+}
+
+/* 主画面显示本地时镜像 */
+.video-tile video.mirror {
+  transform: scaleX(-1);
 }
 
 .call-top {

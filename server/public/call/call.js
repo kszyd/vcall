@@ -106,8 +106,8 @@
     if (state.localStream) return true;
     if (state.receiveOnly) return false;
     try {
-      state.localStream = await openMedia($('joinAudio').checked);
-      state.micOn = $('joinAudio').checked;
+      state.localStream = await openMedia(true);
+      state.micOn = true;
       $('localVideo').srcObject = state.localStream;
       $('secureHint').classList.add('hidden');
       return true;
@@ -482,6 +482,78 @@
     updateCamButton();
   }
 
+  /** 小窗可拖动；单击在本端/远端之间切换主画面 */
+  function setupPip() {
+    const pip = $('localVideo');
+    let dragging = false;
+    let moved = false;
+    let startX = 0;
+    let startY = 0;
+    let originLeft = 0;
+    let originTop = 0;
+
+    pip.addEventListener('pointerdown', (e) => {
+      dragging = true;
+      moved = false;
+      startX = e.clientX;
+      startY = e.clientY;
+      const rect = pip.getBoundingClientRect();
+      originLeft = rect.left;
+      originTop = rect.top;
+      pip.classList.add('dragging');
+      try {
+        pip.setPointerCapture(e.pointerId);
+      } catch (err) {
+        // ignore
+      }
+    });
+
+    pip.addEventListener('pointermove', (e) => {
+      if (!dragging) return;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      if (Math.abs(dx) + Math.abs(dy) > 4) moved = true;
+      const maxLeft = window.innerWidth - pip.offsetWidth - 4;
+      const maxTop = window.innerHeight - pip.offsetHeight - 4;
+      const left = Math.max(4, Math.min(originLeft + dx, maxLeft));
+      const top = Math.max(4, Math.min(originTop + dy, maxTop));
+      pip.style.left = left + 'px';
+      pip.style.top = top + 'px';
+      pip.style.right = 'auto';
+      pip.style.bottom = 'auto';
+    });
+
+    pip.addEventListener('pointerup', (e) => {
+      if (!dragging) return;
+      dragging = false;
+      pip.classList.remove('dragging');
+      try {
+        pip.releasePointerCapture(e.pointerId);
+      } catch (err) {
+        // ignore
+      }
+      if (!moved) toggleMainView();
+    });
+
+    pip.addEventListener('pointercancel', () => {
+      dragging = false;
+      pip.classList.remove('dragging');
+    });
+  }
+
+  function toggleMainView() {
+    // 一对一才切换，多人网格保持不动
+    if (state.peers.size !== 1) return;
+    const tile = document.querySelector('#videoGrid .video-tile video');
+    if (!tile) return;
+    const current = $('localVideo').srcObject;
+    $('localVideo').srcObject = tile.srcObject;
+    tile.srcObject = current;
+    state.swapped = !state.swapped;
+    $('localVideo').classList.toggle('remote-view', state.swapped);
+    tile.classList.toggle('mirror', state.swapped);
+  }
+
   function leaveCall(silent) {
     if (state.callId) send({ type: 'call-leave', callId: state.callId });
     state.callId = null;
@@ -492,6 +564,8 @@
     $('videoGrid').textContent = '';
     // 挂断即释放摄像头/麦克风，避免指示灯常亮
     stopMedia();
+    state.swapped = false;
+    $('localVideo').classList.remove('remote-view');
     $('call').classList.add('hidden');
     $('directory').classList.remove('hidden');
     $('callTimer').textContent = '00:00';
@@ -745,6 +819,7 @@
   });
   $('micBtn').addEventListener('click', toggleMic);
   $('camBtn').addEventListener('click', toggleCam);
+  setupPip();
   $('hangupBtn').addEventListener('click', () => leaveCall());
 
   window.addEventListener('beforeunload', () => {
