@@ -347,6 +347,7 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
 
         localContainer.layoutParams = localParams
         remoteGrid.layoutParams = gridParams
+        session?.setSwappedLayout(swapped)
 
         // 全屏时去掉小窗的圆角描边背景
         if (swapped) {

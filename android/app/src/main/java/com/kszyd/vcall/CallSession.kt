@@ -86,8 +86,22 @@ class CallSession(
         localRenderer.setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FILL)
         localRenderer.setEnableHardwareScaler(true)
         localRenderer.setMirror(true)
-        // 不能设 ZOrderMediaOverlay=true：切成全屏后会盖住控制栏与远端小窗
-        localRenderer.setZOrderMediaOverlay(false)
+        // 默认本地是小窗，浮在远端全屏之上
+        localRenderer.setZOrderMediaOverlay(true)
+    }
+
+    /**
+     * 切换大小画面时同步调整两个 SurfaceView 的层级：
+     * 小窗用 MediaOverlay 浮起，全屏用普通层垫底，避免互相遮挡。
+     */
+    fun setSwappedLayout(swapped: Boolean) {
+        try {
+            localRenderer.setZOrderMediaOverlay(!swapped)
+            for (i in 0 until grid.childCount) {
+                (grid.getChildAt(i) as? SurfaceViewRenderer)?.setZOrderMediaOverlay(swapped)
+            }
+        } catch (ignored: Throwable) {
+        }
     }
 
     fun setIceServers(servers: List<PeerConnection.IceServer>) {
