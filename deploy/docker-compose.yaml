@@ -1,53 +1,40 @@
-# VCall 信令服务 · Docker Compose 部署（YAML）
+# VCall 信令服务 · Docker Compose 部署
 # 用法（在仓库根目录执行）：
 #   docker compose -f deploy/docker-compose.yaml up -d
 # 访问：
-#   http://192.168.199.100:9002/admin
-# 说明：
-#   - 所有配置直接写在本文件中，不使用 .env
-#   - 数据目录为与本文件同级的 ./data
+#   管理后台  http://192.168.199.100:9002/admin
+#   网页端    http://192.168.199.100:9002/call
 name: vcall
 
 services:
   vcall:
-    image: kszyd/vcall-server:latest
+    image: kszyd/vcall-server:latest      # 需要固定版本时改成 :2.4.0 这类标签
     container_name: vcall
     restart: unless-stopped
     ports:
-      - "9002:9002"
-      - "9443:9443"
+      - "9002:9002"                       # 宿主机:容器；管理后台、网页端、信令共用
+
     environment:
-      VCALL_PORT: "9002"
-      VCALL_DATA_DIR: "/data"
-      VCALL_ADMIN_USER: "admin"
-      VCALL_ADMIN_PASSWORD: "vcall@2026"
-      VCALL_ADMIN_SECRET: "please-change-this-secret"
-      VCALL_MAX_CALL_MEMBERS: "6"
-      VCALL_ANNOUNCEMENT: ""
-      VCALL_LOG_LEVEL: "info"
-      TZ: "Asia/Shanghai"
-      # 跨网段/防火墙场景再填写，内网直连可留空
-      VCALL_STUN_URLS: ""
-      VCALL_TURN_URL: ""
-      VCALL_TURN_USER: ""
-      VCALL_TURN_PASS: ""
-      # 可选 HTTPS：证书放到 ./certs 后填写容器内路径，浏览器端才能使用摄像头
-      VCALL_TLS_PORT: "9443"
-      VCALL_TLS_CERT: ""
-      VCALL_TLS_KEY: ""
+      # ---------- 管理后台 ----------
+      VCALL_ADMIN_PASSWORD: "vcall@2026"                  # 登录密码，部署前请修改
+      VCALL_ADMIN_SECRET: "please-change-this-secret"     # 令牌签名密钥，建议改成随机长串
+
+      # ---------- 通话 ----------
+      VCALL_MAX_CALL_MEMBERS: "6"         # 单次通话人数上限（2-12）
+      VCALL_ANNOUNCEMENT: ""              # 公告，留空即可；也可在管理后台推送
+
+      # ---------- 其它 ----------
+      TZ: "Asia/Shanghai"                 # 日志时区
+
+      # ---------- 可选：跨网段或公网时再取消注释 ----------
+      # VCALL_TURN_URL: "turn:192.168.199.100:3478"
+      # VCALL_TURN_USER: "vcall"
+      # VCALL_TURN_PASS: "yourpass"
+      # VCALL_STUN_URLS: "stun:stun.l.google.com:19302"
+
     volumes:
-      - ./data:/data
-      - ./certs:/certs:ro
-    healthcheck:
-      test:
-        - CMD
-        - node
-        - -e
-        - "fetch('http://127.0.0.1:9002/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
+      - ./data:/data                      # 持久化设置（settings.json），首次启动自动创建
+
     logging:
       driver: json-file
       options:

@@ -166,18 +166,19 @@ APK 使用 debug 签名，可直接安装并覆盖升级；电视可用 U 盘或
 
 | 环境变量 | 默认值 | 说明 |
 | --- | --- | --- |
-| `VCALL_PORT` | `9002` | 服务端口 |
-| `VCALL_ADMIN_USER` | `admin` | 管理用户名 |
-| `VCALL_ADMIN_PASSWORD` | `vcall@2026` | 管理密码 |
-| `VCALL_ADMIN_SECRET` | 随机 | 管理令牌签名密钥，生产必须固定 |
+| **管理后台** | | |
+| `VCALL_ADMIN_PASSWORD` | `vcall@2026` | 登录密码，部署前务必修改 |
+| `VCALL_ADMIN_SECRET` | 随机 | 令牌签名密钥，建议固定为随机长串 |
+| **通话** | | |
 | `VCALL_MAX_CALL_MEMBERS` | `6` | 单次通话人数上限（2-12） |
-| `VCALL_ANNOUNCEMENT` | 空 | 客户端公告 |
-| `VCALL_STUN_URLS` | 空 | 逗号分隔的 STUN 地址 |
-| `VCALL_TURN_URL` | 空 | TURN 地址，跨网段/防火墙时需要 |
-| `VCALL_TURN_USER` / `VCALL_TURN_PASS` | 空 | TURN 账号 |
-| `VCALL_DATA_DIR` | `/data` | 数据卷（设置持久化） |
-| `VCALL_TLS_PORT` | `9443` | HTTPS 端口，配置证书后生效 |
-| `VCALL_TLS_CERT` / `VCALL_TLS_KEY` | 空 | 证书/私钥容器内路径，留空则仅 HTTP |
+| `VCALL_ANNOUNCEMENT` | 空 | 公告，也可在管理后台推送 |
+| **可选（跨网段/公网）** | | |
+| `VCALL_TURN_URL` / `VCALL_TURN_USER` / `VCALL_TURN_PASS` | 空 | TURN 地址与账号 |
+| `VCALL_STUN_URLS` | 空 | 自定义 STUN，逗号分隔 |
+| **高级** | | |
+| `VCALL_PORT` | `9002` | 容器内服务端口 |
+| `VCALL_ADMIN_USER` | `admin` | 管理用户名 |
+| `VCALL_DATA_DIR` | `/data` | 数据目录（设置持久化） |
 | `VCALL_LOG_LEVEL` | `info` | `debug`/`info`/`warn`/`error` |
 
 > 纯内网（同一网段、无客户端隔离）无需 STUN/TURN 即可直连。

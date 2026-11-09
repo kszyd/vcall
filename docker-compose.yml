@@ -1,4 +1,4 @@
-# 本地构建镜像启动（配置直接写在 YAML，数据目录 ./data）
+# VCall · 本地构建镜像启动（配置直接写在 YAML，数据目录 ./data）
 # 用法：docker compose up -d --build
 name: vcall
 
@@ -11,38 +11,28 @@ services:
     container_name: vcall
     restart: unless-stopped
     ports:
-      - "9002:9002"
-      - "9443:9443"
+      - "9002:9002"                       # 管理后台 / 网页端 / 信令共用
+
     environment:
-      VCALL_PORT: "9002"
-      VCALL_DATA_DIR: "/data"
-      VCALL_ADMIN_USER: "admin"
-      VCALL_ADMIN_PASSWORD: "vcall@2026"
-      VCALL_ADMIN_SECRET: "please-change-this-secret"
-      VCALL_MAX_CALL_MEMBERS: "6"
+      # ---------- 管理后台 ----------
+      VCALL_ADMIN_PASSWORD: "vcall@2026"                  # 登录密码，部署前请修改
+      VCALL_ADMIN_SECRET: "please-change-this-secret"     # 令牌签名密钥，建议改成随机长串
+
+      # ---------- 通话 ----------
+      VCALL_MAX_CALL_MEMBERS: "6"         # 单次通话人数上限（2-12）
       VCALL_ANNOUNCEMENT: ""
-      VCALL_LOG_LEVEL: "info"
+
+      # ---------- 其它 ----------
       TZ: "Asia/Shanghai"
-      VCALL_STUN_URLS: ""
-      VCALL_TURN_URL: ""
-      VCALL_TURN_USER: ""
-      VCALL_TURN_PASS: ""
-      VCALL_TLS_PORT: "9443"
-      VCALL_TLS_CERT: ""
-      VCALL_TLS_KEY: ""
+
+      # ---------- 可选：跨网段或公网时再取消注释 ----------
+      # VCALL_TURN_URL: "turn:192.168.199.100:3478"
+      # VCALL_TURN_USER: "vcall"
+      # VCALL_TURN_PASS: "yourpass"
+
     volumes:
-      - ./data:/data
-      - ./certs:/certs:ro
-    healthcheck:
-      test:
-        - CMD
-        - node
-        - -e
-        - "fetch('http://127.0.0.1:9002/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
+      - ./data:/data                      # 持久化设置
+
     logging:
       driver: json-file
       options:

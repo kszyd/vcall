@@ -30,15 +30,12 @@ metadata:
   name: vcall-config
   namespace: vcall
 data:
-  VCALL_PORT: "9002"
-  VCALL_DATA_DIR: "/data"
   VCALL_MAX_CALL_MEMBERS: "6"
-  VCALL_LOG_LEVEL: "info"
   TZ: "Asia/Shanghai"
-  # 跨网段时填写 TURN
-  VCALL_TURN_URL: ""
-  VCALL_TURN_USER: ""
-  VCALL_TURN_PASS: ""
+  # 跨网段时取消注释并填写 TURN
+  # VCALL_TURN_URL: "turn:192.168.199.100:3478"
+  # VCALL_TURN_USER: "vcall"
+  # VCALL_TURN_PASS: "yourpass"
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
