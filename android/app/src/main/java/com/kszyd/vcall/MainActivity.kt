@@ -935,7 +935,7 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
         created.onError = { message -> runOnUiThread { showHint(message) } }
         session = created
 
-        if (!created.startLocalMedia(prefs.wideAngle)) {
+        if (!created.startLocalMedia()) {
             showHint(getString(R.string.no_camera))
         }
     }
