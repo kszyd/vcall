@@ -843,7 +843,17 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
     /* ------------------------------ 通话 ------------------------------ */
 
     private fun prepareSession() {
-        if (session != null) return
+        val existing = session
+        if (existing != null) {
+            existing.setIceServers(iceServers)
+            // 上一通结束后已释放采集，这里重新打开摄像头/麦克风
+            if (!existing.isMediaActive) {
+                if (!existing.startLocalMedia(prefs.wideAngle)) {
+                    showHint(getString(R.string.no_camera))
+                }
+            }
+            return
+        }
         val created = CallSession(this, app, localRenderer, remoteGrid)
         created.initRenderers()
         created.setIceServers(iceServers)
@@ -906,6 +916,8 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
         callTopBar.visibility = View.VISIBLE
         bottomBar.visibility = View.VISIBLE
         session?.closeAll()
+        // 通话结束立即释放摄像头/麦克风，弹出式摄像头会自动缩回
+        session?.stopLocalMedia()
         updateMicUi()
         showDirectory()
         callTimer.text = "00:00"

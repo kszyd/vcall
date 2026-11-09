@@ -509,10 +509,8 @@ class CallSession(
 
     /* ------------------------------ 释放 ------------------------------ */
 
-    fun release() {
-        if (released) return
-        released = true
-        closeAll()
+    /** 停止并释放本地采集（摄像头/麦克风），通话结束后调用可让弹出式摄像头缩回 */
+    fun stopLocalMedia() {
         try {
             videoCapturer?.stopCapture()
         } catch (ignored: Throwable) {
@@ -548,11 +546,22 @@ class CallSession(
         } catch (ignored: Throwable) {
         }
         audioSource = null
+        hasVideo = false
+        restoreAudio()
+    }
+
+    val isMediaActive: Boolean
+        get() = videoTrack != null || audioTrack != null
+
+    fun release() {
+        if (released) return
+        released = true
+        closeAll()
+        stopLocalMedia()
         try {
             localRenderer.release()
         } catch (ignored: Throwable) {
         }
-        restoreAudio()
     }
 
     open class SimpleSdpObserver : SdpObserver {
