@@ -687,6 +687,12 @@
 
   $('connectBtn').addEventListener('click', connect);
   $('myName').addEventListener('click', editNickname);
+
+  // 打开页面就先取一次公告，登录前也能看到
+  fetch('/api/config')
+    .then((r) => r.json())
+    .then((cfg) => setAnnouncement(cfg.announcement || ''))
+    .catch(() => {});
   $('logoutBtn').addEventListener('click', () => {
     if (state.ws) state.ws.close();
   });
