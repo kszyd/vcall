@@ -39,7 +39,7 @@ jobs:
       - name: Build APK (debug + release)
         run: ./gradlew --no-daemon --stacktrace assembleDebug assembleRelease
 
-      - name: Collect APKs
+      - name: Collect main APKs
         run: |
           mkdir -p out
           VERSION=$(grep -oP 'versionName\s*=\s*"\K[^"]+' app/build.gradle.kts | head -1)
@@ -48,6 +48,13 @@ jobs:
           if [ -f app/build/outputs/apk/release/app-release.apk ]; then
             cp app/build/outputs/apk/release/app-release.apk "out/VCall-${VERSION}.apk"
           fi
+
+      - name: Build compat APK (armv7, legacy packaging)
+        run: ./gradlew --no-daemon --stacktrace assembleRelease -Pcompat=1
+
+      - name: Collect compat APK
+        run: |
+          cp app/build/outputs/apk/release/app-release.apk "out/VCall-${VERSION}-armv7.apk"
           ls -lh out
 
       - name: Upload artifact
