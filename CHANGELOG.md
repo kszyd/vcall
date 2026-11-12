@@ -2,6 +2,12 @@
 
 VCall 的重要版本节点，按时间倒序。每个版本都能在 [Releases](https://github.com/kszyd/vcall/releases) 下载对应的 APK。
 
+## v2.10.1 · 2026-11-12
+
+- 新增 32 位兼容包 `VCall-2.10.1-armv7.apk`：仅含 armeabi-v7a，so 改为解压安装，体积 7.2 MB
+- 适配 RK3566 等运行 32 位 Android 系统的电视盒子（当贝 H3S 等）
+- `verify_apk.py` 支持单 ABI 包校验，不再误报 FAIL
+
 ## v2.10.0 · 2026-11-12
 
 **客户端版本推送**
