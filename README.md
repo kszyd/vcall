@@ -9,10 +9,11 @@
 | 源码仓库 | https://github.com/kszyd/vcall |
 | APK 下载 | https://github.com/kszyd/vcall/releases/latest |
 | 容器镜像 | https://hub.docker.com/r/kszyd/vcall-server |
+| 更新记录 | [CHANGELOG.md](CHANGELOG.md) |
 
 ## 验证情况
 
-- 服务端 34 项联调测试全部通过：终端注册、通讯录同步、一对一/多人呼叫、拒接、离开、管理员下线、鉴权与静态资源
+- 服务端 44 项联调测试全部通过：终端注册、通讯录同步、一对一/多人呼叫、拒接、离开、管理员下线、鉴权与静态资源
 - 管理后台已在 Chromium 中完成登录、仪表盘与日志渲染验证
 - APK 由 GitHub Actions 构建成功：含 `arm64-v8a` / `armeabi-v7a` 原生库、v1+v2 签名、Leanback 启动声明
 - 尚未验证：真机摄像头/麦克风通话、电视实机安装（缺少测试设备）
