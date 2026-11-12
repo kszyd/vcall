@@ -39,9 +39,10 @@ function sanitizeDevice(device) {
 }
 
 class SignalingService {
-  constructor({ config, logger }) {
+  constructor({ config, logger, apk }) {
     this.config = config;
     this.logger = logger;
+    this.apk = apk || null;
     this.terminals = new Map(); // id -> terminal
     this.calls = new Map(); // callId -> call
     this.history = [];
@@ -107,6 +108,7 @@ class SignalingService {
       ringTimeoutSeconds: Math.round(RING_TIMEOUT_MS / 1000),
       allowWebClient: this.config.allowWebClient,
       announcement: this.config.announcement,
+      apk: this.apk ? this.apk.latest() : null,
     });
   }
 
@@ -186,7 +188,11 @@ class SignalingService {
       tv: terminal.device.isTv,
     });
 
-    this._send(terminal, { type: 'registered', self: this._publicTerminal(terminal, true) });
+    this._send(terminal, {
+      type: 'registered',
+      self: this._publicTerminal(terminal, true),
+      apk: this.apk ? this.apk.latest() : null,
+    });
     this._broadcastDirectory();
   }
 
@@ -752,6 +758,19 @@ class SignalingService {
       count += 1;
     }
     this.logger.info('已推送公告', { terminals: count, text: message });
+    return count;
+  }
+
+  /** 推送新版本 APK 给所有在线终端 */
+  broadcastApkUpdate(info) {
+    if (!info) return 0;
+    let count = 0;
+    for (const terminal of this.terminals.values()) {
+      if (!terminal.registered) continue;
+      this._send(terminal, { type: 'apk-update', ...info });
+      count += 1;
+    }
+    this.logger.info('已推送 APK 更新', { terminals: count, version: info.version });
     return count;
   }
 

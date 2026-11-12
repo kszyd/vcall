@@ -546,6 +546,37 @@ td.empty {
   color: var(--muted);
 }
 
+.apk-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.apk-row input[type='file'] {
+  flex: 1 1 240px;
+  padding: 9px 10px;
+  font-size: 13px;
+}
+
+.apk-row input[type='text'] {
+  flex: 0 0 150px;
+  width: 150px;
+}
+
+.apk-row input[type='number'] {
+  flex: 0 0 140px;
+  width: 140px;
+}
+
+@media (max-width: 640px) {
+  .apk-row input[type='text'],
+  .apk-row input[type='number'] {
+    flex: 1 1 120px;
+    width: auto;
+  }
+}
+
 .logs {
   max-height: 150px;
   overflow-y: auto;

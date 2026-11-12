@@ -2,10 +2,12 @@ package com.kszyd.vcall
 
 import android.Manifest
 import android.app.AlertDialog
+import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.graphics.Color
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -92,6 +94,7 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
     private var dragging = false
     private var fullscreen = false
     private var announcementValue = ""
+    private var promptedApkCode = 0
     private val touchSlop by lazy { ViewConfiguration.get(this).scaledTouchSlop }
 
     private lateinit var loginPanel: View
@@ -626,6 +629,7 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
             "welcome" -> {
                 iceServers = CallSession.parseIceServers(message.optJSONArray("iceServers"))
                 applyAnnouncement(message.optString("announcement", ""))
+                checkApkUpdate(message.optJSONObject("apk"))
             }
 
             "registered" -> {
@@ -639,6 +643,7 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
                 joinButton.text = getString(R.string.join_room)
                 setupStatus.text = ""
                 showDirectory()
+                checkApkUpdate(message.optJSONObject("apk"))
             }
 
             "directory" -> {
@@ -769,6 +774,8 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
                 toast(if (text.isNotEmpty()) "公告：$text" else "公告已清除")
             }
 
+            "apk-update" -> checkApkUpdate(message)
+
             "error" -> {
                 val text = message.optString("message", "发生错误")
                 toast(text)
@@ -803,6 +810,41 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
         if (loginPanel.visibility != View.VISIBLE) return
         announcementText.text = text
         announcementText.visibility = if (text.isEmpty()) View.GONE else View.VISIBLE
+    }
+
+    /** 服务端发布了新版本 APK 时提示下载 */
+    private fun checkApkUpdate(apk: JSONObject?) {
+        if (apk == null) return
+        val code = apk.optInt("versionCode", 0)
+        val version = apk.optString("version", "")
+        if (code <= BuildConfig.VERSION_CODE) return
+        if (code <= promptedApkCode) return
+        promptedApkCode = code
+
+        val server = prefs.server.trim().trimEnd('/')
+        if (server.isEmpty()) return
+        val base = if (server.startsWith("http://") || server.startsWith("https://")) {
+            server
+        } else {
+            "http://" + server
+        }
+        val url = "$base/api/apk/download"
+
+        runOnUiThread {
+            if (isFinishing) return@runOnUiThread
+            AlertDialog.Builder(this)
+                .setTitle("发现新版本 $version")
+                .setMessage("当前版本 ${BuildConfig.VERSION_NAME}，是否现在下载更新？")
+                .setPositiveButton("下载") { _, _ ->
+                    try {
+                        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                    } catch (err: Throwable) {
+                        toast("无法打开下载链接：$url")
+                    }
+                }
+                .setNegativeButton("稍后", null)
+                .show()
+        }
     }
 
     /** 启动时主动拉取一次公告，未连接 WebSocket 也能看到 */

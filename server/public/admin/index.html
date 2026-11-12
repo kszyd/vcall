@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>VCall 管理后台</title>
   <link rel="icon" href="/admin/favicon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="/admin/app.css?v=2.9.8" />
+  <link rel="stylesheet" href="/admin/app.css?v=2.10.0" />
 </head>
 <body>
   <!-- 登录 -->
@@ -118,6 +118,20 @@
         </article>
       </section>
 
+      <section class="card apk-card">
+        <div class="card-head">
+          <h2>客户端版本</h2>
+          <span class="muted small" id="apkCurrent">未上传</span>
+        </div>
+        <div class="apk-row">
+          <input id="apkFile" type="file" accept=".apk,application/vnd.android.package-archive" />
+          <input id="apkVersion" type="text" maxlength="20" placeholder="版本名 如 2.10.0" />
+          <input id="apkVersionCode" type="number" min="1" step="1" placeholder="版本码 如 18" />
+          <button class="btn primary" id="uploadApk" type="button">上传并推送</button>
+        </div>
+        <p class="hint muted" id="apkHint">上传后，打开 APK 的终端会自动收到新版本提示，在线终端立即收到推送。</p>
+      </section>
+
       <section class="card">
         <div class="card-head">
           <h2>通话</h2>
@@ -201,6 +215,6 @@
   </div>
 
   <div id="toast" class="toast hidden"></div>
-  <script src="/admin/app.js?v=2.9.8"></script>
+  <script src="/admin/app.js?v=2.10.0"></script>
 </body>
 </html>

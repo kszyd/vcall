@@ -1,6 +1,7 @@
 'use strict';
 
 const crypto = require('crypto');
+const fs = require('fs');
 
 const LOGIN_WINDOW_MS = 60 * 1000;
 const LOGIN_MAX_ATTEMPTS = 6;
@@ -15,10 +16,11 @@ function fromBase64url(input) {
 }
 
 class AdminService {
-  constructor({ config, logger, signaling }) {
+  constructor({ config, logger, signaling, apk }) {
     this.config = config;
     this.logger = logger;
     this.signaling = signaling;
+    this.apk = apk || null;
     this.secret = config.adminSecret || crypto.randomBytes(32).toString('hex');
     if (!config.adminSecret) {
       this.logger.warn('未设置 VCALL_ADMIN_SECRET，本次启动使用随机密钥（重启后管理登录失效）');
@@ -92,6 +94,31 @@ class AdminService {
         announcement: this.config.announcement,
         serverTime: Date.now(),
       });
+    }
+
+    if (path === '/api/apk/latest' && req.method === 'GET') {
+      const latest = this.apk ? this.apk.latest() : null;
+      if (!latest) return this.json(res, 404, { ok: false, error: '尚未上传 APK' });
+      return this.json(res, 200, { ok: true, ...latest });
+    }
+
+    if (path === '/api/apk/download' && (req.method === 'GET' || req.method === 'HEAD')) {
+      const file = this.apk ? this.apk.filePath() : null;
+      if (!file || !fs.existsSync(file)) {
+        return this.json(res, 404, { ok: false, error: '尚未上传 APK' });
+      }
+      const stat = fs.statSync(file);
+      res.writeHead(200, {
+        'Content-Type': 'application/vnd.android.package-archive',
+        'Content-Length': stat.size,
+        'Content-Disposition': `attachment; filename="VCall-${this.apk.info.version}.apk"`,
+        'Cache-Control': 'no-store',
+        'X-Content-Type-Options': 'nosniff',
+      });
+      if (req.method === 'HEAD') {
+        return res.end();
+      }
+      return fs.createReadStream(file).pipe(res);
     }
 
     if (path === '/api/admin/login' && req.method === 'POST') {
@@ -230,6 +257,53 @@ class AdminService {
     }
 
     return this.json(res, 404, { ok: false, error: 'not_found' });
+  }
+
+  /** 接收管理端上传的 APK（二进制流），保存后立即推送给在线终端 */
+  async handleApkUpload(req, res) {
+    const payload = this.auth(req);
+    if (!payload) return this.json(res, 401, { ok: false, error: '未登录或登录已过期' });
+    if (!this.apk) return this.json(res, 500, { ok: false, error: 'APK 存储未初始化' });
+
+    const version = String(req.headers['x-version'] || '').trim().slice(0, 20);
+    const versionCode = Number(req.headers['x-version-code']);
+    if (!version || !Number.isInteger(versionCode) || versionCode <= 0) {
+      return this.json(res, 400, { ok: false, error: '请填写版本名和版本码（版本码为正整数）' });
+    }
+    if (this.apk.info && versionCode <= this.apk.info.versionCode) {
+      return this.json(res, 400, {
+        ok: false,
+        error: `版本码需大于当前版本 ${this.apk.info.versionCode}`,
+      });
+    }
+
+    let received;
+    try {
+      received = await this.apk.receive(req);
+    } catch (err) {
+      const raw = err && err.message ? err.message : '';
+      const message =
+        raw === 'apk_too_large'
+          ? 'APK 超过 200MB 上限'
+          : raw === 'apk_empty'
+            ? '没有收到文件内容'
+            : '接收 APK 失败：' + raw;
+      return this.json(res, 400, { ok: false, error: message });
+    }
+
+    let info;
+    try {
+      info = this.apk.commit({ ...received, version, versionCode });
+    } catch (err) {
+      return this.json(res, 500, {
+        ok: false,
+        error: '保存失败，请检查容器 ./data 挂载权限：' + (err && err.message ? err.message : err),
+      });
+    }
+
+    const online = this.signaling.broadcastApkUpdate(info);
+    this.logger.info('管理端上传 APK', { version, versionCode, size: info.size, online });
+    return this.json(res, 200, { ok: true, apk: info, online });
   }
 
   auth(req) {

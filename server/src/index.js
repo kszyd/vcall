@@ -10,12 +10,14 @@ const config = require('./config');
 const Logger = require('./logger');
 const { SignalingService } = require('./signaling');
 const AdminService = require('./admin');
+const ApkStore = require('./apk');
 const StaticServer = require('./http');
 const { attachWebSocket } = require('./ws');
 
 const logger = new Logger(config);
-const signaling = new SignalingService({ config, logger });
-const admin = new AdminService({ config, logger, signaling });
+const apk = new ApkStore({ config, logger });
+const signaling = new SignalingService({ config, logger, apk });
+const admin = new AdminService({ config, logger, signaling, apk });
 const staticServer = new StaticServer(path.resolve(__dirname, '..', 'public'));
 
 // 读取持久化的管理设置（若存在）
@@ -84,6 +86,16 @@ const requestHandler = async (req, res) => {
   }
 
   if (url.pathname.startsWith('/api/')) {
+    // APK 上传走二进制流，不能按 JSON 解析
+    if (url.pathname === '/api/admin/apk' && req.method === 'POST') {
+      try {
+        await admin.handleApkUpload(req, res);
+      } catch (err) {
+        logger.error('APK 上传异常', { error: String(err && err.message) });
+        if (!res.headersSent) sendJson(res, 500, { ok: false, error: '上传失败' });
+      }
+      return undefined;
+    }
     let body = {};
     if (req.method === 'POST') {
       try {

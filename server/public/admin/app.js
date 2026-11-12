@@ -110,12 +110,13 @@
     if (state.loading || !state.token) return;
     state.loading = true;
     try {
-      const [overview, calls, terminals, metrics, logs] = await Promise.all([
+      const [overview, calls, terminals, metrics, logs, apkInfo] = await Promise.all([
         api('/api/admin/overview'),
         api('/api/admin/calls'),
         api('/api/admin/terminals'),
         api('/api/admin/metrics'),
         api('/api/admin/logs?limit=80' + ($('logLevel').value ? '&level=' + $('logLevel').value : '')),
+        api('/api/apk/latest').catch(() => null),
       ]);
       state.failures = 0;
       setConnected(true);
@@ -125,6 +126,7 @@
       renderMetrics(metrics.samples);
       renderHistory(metrics.history);
       renderLogs(logs.logs);
+      renderApk(apkInfo);
     } catch (err) {
       state.failures += 1;
       if (state.failures >= 2) setConnected(false);
@@ -156,6 +158,76 @@
     const d = new Date(ts);
     const pad = (n) => String(n).padStart(2, '0');
     return pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+  }
+
+  /* ------------------------------ 客户端版本 ------------------------------ */
+
+  function renderApk(info) {
+    if (!info || !info.version) {
+      $('apkCurrent').textContent = '未上传';
+      return;
+    }
+    const size = info.size ? (info.size / 1024 / 1024).toFixed(1) + ' MB' : '';
+    $('apkCurrent').textContent =
+      '当前 v' + info.version + '（版本码 ' + info.versionCode + '）' +
+      (size ? ' · ' + size : '') +
+      (info.uploadedAt ? ' · ' + formatClock(info.uploadedAt) : '');
+    if (!$('apkVersion').value) $('apkVersion').value = info.version;
+    if (!$('apkVersionCode').value) $('apkVersionCode').value = String(info.versionCode + 1);
+  }
+
+  function uploadApk() {
+    const file = $('apkFile').files && $('apkFile').files[0];
+    const version = $('apkVersion').value.trim();
+    const versionCode = Number($('apkVersionCode').value);
+    if (!file) {
+      toast('请先选择 APK 文件');
+      return;
+    }
+    if (!version || !Number.isInteger(versionCode) || versionCode <= 0) {
+      toast('请填写版本名和版本码');
+      return;
+    }
+
+    const btn = $('uploadApk');
+    btn.disabled = true;
+    $('apkHint').textContent = '上传中 0%';
+
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/api/admin/apk');
+    xhr.setRequestHeader('Authorization', 'Bearer ' + state.token);
+    xhr.setRequestHeader('x-version', version);
+    xhr.setRequestHeader('x-version-code', String(versionCode));
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) {
+        $('apkHint').textContent = '上传中 ' + Math.round((e.loaded / e.total) * 100) + '%';
+      }
+    };
+    xhr.onload = () => {
+      btn.disabled = false;
+      let data = {};
+      try {
+        data = JSON.parse(xhr.responseText || '{}');
+      } catch (err) {
+        data = {};
+      }
+      if (xhr.status >= 200 && xhr.status < 300 && data.ok) {
+        $('apkHint').textContent =
+          '已上传 v' + data.apk.version + '，已通知 ' + (data.online || 0) + ' 台在线终端';
+        $('apkFile').value = '';
+        $('apkVersionCode').value = '';
+        renderApk(data.apk);
+        toast('新版本已推送');
+      } else {
+        $('apkHint').textContent = '上传失败：' + (data.error || 'HTTP ' + xhr.status);
+        toast(data.error || '上传失败');
+      }
+    };
+    xhr.onerror = () => {
+      btn.disabled = false;
+      $('apkHint').textContent = '上传失败：网络错误';
+    };
+    xhr.send(file);
   }
 
   /* ------------------------------ 渲染 ------------------------------ */
@@ -483,6 +555,7 @@
   }
   $('pushAnnouncement').addEventListener('click', pushAnnouncement);
   $('saveLimits').addEventListener('click', saveLimits);
+  $('uploadApk').addEventListener('click', uploadApk);
   $('refreshLogs').addEventListener('click', refresh);
   $('logLevel').addEventListener('change', refresh);
   document.addEventListener('visibilitychange', () => {
