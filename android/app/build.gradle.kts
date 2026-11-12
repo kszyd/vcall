@@ -11,12 +11,14 @@ android {
         applicationId = "com.kszyd.vcall"
         minSdk = 23
         targetSdk = 34
-        versionCode = 17
-        versionName = "2.10.0"
+        versionCode = 18
+        versionName = "2.10.1"
 
         // 覆盖绝大多数手机与电视盒子；x86 模拟器如需调试可自行添加
+        // -Pcompat=1 构建 32 位兼容包（仅 armeabi-v7a，so 解压安装），用于老旧盒子
         ndk {
-            abiFilters += listOf("armeabi-v7a", "arm64-v8a")
+            val compat = (project.findProperty("compat") as String?) == "1"
+            abiFilters += if (compat) listOf("armeabi-v7a") else listOf("armeabi-v7a", "arm64-v8a")
         }
     }
 
@@ -56,7 +58,7 @@ android {
             )
         }
         jniLibs {
-            useLegacyPackaging = false
+            useLegacyPackaging = (project.findProperty("compat") as String?) == "1"
         }
     }
 
