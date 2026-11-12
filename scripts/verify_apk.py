@@ -27,11 +27,16 @@ def check_zip(path):
             ok &= exists
             print("  %s %s" % (mark(exists), item))
 
-        for lib in EXPECTED_LIBS:
-            exists = lib in names
-            ok &= exists
-            size = apk.getinfo(lib).file_size // 1024 if exists else 0
-            print("  %s %s (%d KB)" % (mark(exists), lib, size))
+        # 兼容包可能只带单一 ABI，只要存在的 so 非空即可
+        libs = sorted(n for n in names if n.startswith("lib/") and n.endswith(".so"))
+        if not libs:
+            ok = False
+            print("  FAIL 未找到 native so")
+        for lib in libs:
+            size = apk.getinfo(lib).file_size // 1024
+            good = size > 0
+            ok &= good
+            print("  %s %s (%d KB)" % (mark(good), lib, size))
 
         dex_files = sorted(n for n in names if n.startswith("classes") and n.endswith(".dex"))
         print("  OK   dex: %s" % ", ".join(dex_files))
