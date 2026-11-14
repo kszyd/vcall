@@ -212,8 +212,11 @@
         data = {};
       }
       if (xhr.status >= 200 && xhr.status < 300 && data.ok) {
-        $('apkHint').textContent =
-          '已上传 v' + data.apk.version + '，已通知 ' + (data.online || 0) + ' 台在线终端';
+        let message =
+          '已上传 v' + data.apk.version + '（版本码 ' + data.apk.versionCode + '），已通知 ' +
+          (data.online || 0) + ' 台在线终端';
+        if (data.note) message += ' · ' + data.note;
+        $('apkHint').textContent = message;
         $('apkFile').value = '';
         $('apkVersionCode').value = '';
         renderApk(data.apk);

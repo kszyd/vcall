@@ -2,6 +2,7 @@
 
 const crypto = require('crypto');
 const fs = require('fs');
+const { readApkMeta } = require('./apkmeta');
 
 const LOGIN_WINDOW_MS = 60 * 1000;
 const LOGIN_MAX_ATTEMPTS = 6;
@@ -270,12 +271,6 @@ class AdminService {
     if (!version || !Number.isInteger(versionCode) || versionCode <= 0) {
       return this.json(res, 400, { ok: false, error: '请填写版本名和版本码（版本码为正整数）' });
     }
-    if (this.apk.info && versionCode <= this.apk.info.versionCode) {
-      return this.json(res, 400, {
-        ok: false,
-        error: `版本码需大于当前版本 ${this.apk.info.versionCode}`,
-      });
-    }
 
     let received;
     try {
@@ -291,9 +286,29 @@ class AdminService {
       return this.json(res, 400, { ok: false, error: message });
     }
 
+    // 以 APK 内真实的 versionCode/versionName 为准，避免手填偏高导致终端反复提示升级
+    const meta = readApkMeta(received.tmp);
+    let finalVersion = version;
+    let finalCode = versionCode;
+    let note = '';
+    if (meta && meta.versionCode > 0) {
+      if (meta.versionCode !== versionCode || (meta.versionName && meta.versionName !== version)) {
+        finalVersion = meta.versionName || version;
+        finalCode = meta.versionCode;
+        note = `已按 APK 实际版本 ${finalVersion}（${finalCode}）记录`;
+      }
+    }
+
+    if (this.apk.info && finalCode <= this.apk.info.versionCode) {
+      return this.json(res, 400, {
+        ok: false,
+        error: `版本码需大于当前版本 ${this.apk.info.versionCode}`,
+      });
+    }
+
     let info;
     try {
-      info = this.apk.commit({ ...received, version, versionCode });
+      info = this.apk.commit({ ...received, version: finalVersion, versionCode: finalCode });
     } catch (err) {
       return this.json(res, 500, {
         ok: false,
@@ -302,8 +317,14 @@ class AdminService {
     }
 
     const online = this.signaling.broadcastApkUpdate(info);
-    this.logger.info('管理端上传 APK', { version, versionCode, size: info.size, online });
-    return this.json(res, 200, { ok: true, apk: info, online });
+    this.logger.info('管理端上传 APK', {
+      version: info.version,
+      versionCode: info.versionCode,
+      detected: meta || null,
+      size: info.size,
+      online,
+    });
+    return this.json(res, 200, { ok: true, apk: info, online, detected: meta, note });
   }
 
   auth(req) {

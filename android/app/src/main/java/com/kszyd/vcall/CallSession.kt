@@ -61,6 +61,8 @@ class CallSession(
 
     private val peers = LinkedHashMap<String, PeerEntry>()
     private var videoCapturer: CameraVideoCapturer? = null
+    private var captureDeviceName: String? = null
+    private var captureUsesCamera2 = false
     private var videoSource: VideoSource? = null
     private var videoTrack: VideoTrack? = null
     private var audioSource: AudioSource? = null
@@ -131,9 +133,8 @@ class CallSession(
             track.addSink(localRenderer)
             videoTrack = track
             capturer.initialize(surfaceHelper, context, source.capturerObserver)
-            // 电视盒子解码与带宽都弱一些，720p 起步更稳；手机保持 1080p
-            val captureWidth = if (isTvDevice) 1280 else 1920
-            val captureHeight = if (isTvDevice) 720 else 1080
+            // 默认用摄像头原生比例下的最高分辨率（≤1080p），带宽不足时由 WebRTC 自动降清晰度
+            val (captureWidth, captureHeight) = pickCaptureSize()
             capturer.startCapture(captureWidth, captureHeight, 30)
             try {
                 source.adaptOutputFormat(captureWidth, captureHeight, 30)
@@ -155,16 +156,48 @@ class CallSession(
         try {
             val enumerator = Camera2Enumerator(context)
             val name = pickCamera(enumerator.deviceNames, front) { enumerator.isFrontFacing(it) }
-            if (name != null) return enumerator.createCapturer(name, null)
+            if (name != null) {
+                captureDeviceName = name
+                captureUsesCamera2 = true
+                return enumerator.createCapturer(name, null)
+            }
         } catch (ignored: Throwable) {
         }
         try {
             val enumerator = Camera1Enumerator(true)
             val name = pickCamera(enumerator.deviceNames, front) { enumerator.isFrontFacing(it) }
-            if (name != null) return enumerator.createCapturer(name, null)
+            if (name != null) {
+                captureDeviceName = name
+                captureUsesCamera2 = false
+                return enumerator.createCapturer(name, null)
+            }
         } catch (ignored: Throwable) {
         }
         return null
+    }
+
+    /**
+     * 选择与摄像头原生宽高比一致的最大分辨率（不超过 1080p）。
+     * 之前固定 16:9 会把 4:3 摄像头的上下裁掉，看起来就是被放大、发虚。
+     */
+    private fun pickCaptureSize(): Pair<Int, Int> {
+        val fallback = 1280 to 720
+        val name = captureDeviceName ?: return fallback
+        if (!captureUsesCamera2) return fallback
+        return try {
+            val formats = Camera2Enumerator(context).getSupportedFormats(name)
+            if (formats.isNullOrEmpty()) return fallback
+            val largest = formats.maxByOrNull { it.width.toLong() * it.height } ?: return fallback
+            val nativeRatio = largest.width.toDouble() / largest.height
+            val candidates = formats.filter {
+                it.width <= 1920 && it.height <= 1080 && it.width >= 320 &&
+                    kotlin.math.abs(it.width.toDouble() / it.height - nativeRatio) < 0.03
+            }
+            val best = candidates.maxByOrNull { it.width.toLong() * it.height } ?: return fallback
+            best.width to best.height
+        } catch (t: Throwable) {
+            fallback
+        }
     }
 
     private fun pickCamera(names: Array<String>, front: Boolean, isFront: (String) -> Boolean): String? {
@@ -213,8 +246,20 @@ class CallSession(
 
         val entry = PeerEntry(peerId, name, pc, renderer)
         peers[peerId] = entry
+        preferSharpnessUnderBandwidth(pc)
         relayout()
         return pc
+    }
+
+    /** 带宽不足时优先保帧率、降分辨率（即“降清晰度”），而不是画面卡成幻灯片 */
+    private fun preferSharpnessUnderBandwidth(pc: PeerConnection) {
+        try {
+            val sender = pc.senders.firstOrNull { it.track()?.kind() == "video" } ?: return
+            val params = sender.parameters
+            params.degradationPreference = RtpParameters.DegradationPreference.MAINTAIN_FRAMERATE
+            sender.setParameters(params)
+        } catch (ignored: Throwable) {
+        }
     }
 
     private fun observerFor(peerId: String, name: String, renderer: SurfaceViewRenderer): PeerConnection.Observer {
@@ -223,6 +268,8 @@ class CallSession(
 
             override fun onIceConnectionChange(newState: PeerConnection.IceConnectionState?) {
                 if (newState == PeerConnection.IceConnectionState.CONNECTED) {
+                    // 协商完成后再设一次，确保降级策略生效
+                    peers[peerId]?.let { preferSharpnessUnderBandwidth(it.pc) }
                     onPeerConnected?.invoke(peerId)
                 }
             }
