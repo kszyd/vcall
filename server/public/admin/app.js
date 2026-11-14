@@ -123,7 +123,6 @@
       renderOverview(overview.overview);
       renderCalls(calls.calls || []);
       renderTerminals(terminals.terminals || []);
-      renderMetrics(metrics.samples);
       renderHistory(metrics.history);
       renderLogs(logs.logs);
       renderApk(apkInfo);

@@ -115,6 +115,20 @@
                     android:textSize="13sp" />
 
                 <TextView
+                    android:id="@+id/apkDownloadLink"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:gravity="center"
+                    android:paddingTop="8dp"
+                    android:paddingBottom="8dp"
+                    android:text="如需此应用，请点击此处下载！"
+                    android:textColor="#FF60A5FA"
+                    android:textSize="13sp"
+                    android:focusable="true"
+                    android:clickable="true" />
+
+                <TextView
                     android:id="@+id/announcementText"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"

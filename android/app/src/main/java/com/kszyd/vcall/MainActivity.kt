@@ -106,6 +106,7 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
     private lateinit var nameInput: EditText
     private lateinit var joinButton: Button
     private lateinit var setupStatus: TextView
+    private lateinit var apkDownloadLink: TextView
     private lateinit var announcementText: TextView
     private lateinit var fullscreenButton: TextView
 
@@ -199,6 +200,7 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
         nameInput = findViewById(R.id.nameInput)
         joinButton = findViewById(R.id.joinButton)
         setupStatus = findViewById(R.id.setupStatus)
+        apkDownloadLink = findViewById(R.id.apkDownloadLink)
         announcementText = findViewById(R.id.announcementText)
         fullscreenButton = findViewById(R.id.fullscreenButton)
 
@@ -247,6 +249,7 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
 
     private fun setupListeners() {
         joinButton.setOnClickListener { login() }
+        apkDownloadLink.setOnClickListener { openApkDownload() }
         logoutButton.setOnClickListener { logout() }
         callSelectedButton.setOnClickListener { inviteSelected() }
         myName.setOnClickListener { editNickname() }
@@ -820,6 +823,28 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
         if (loginPanel.visibility != View.VISIBLE) return
         announcementText.text = text
         announcementText.visibility = if (text.isEmpty()) View.GONE else View.VISIBLE
+    }
+
+    /** 登录页下载入口：跳到服务端推送的 APK 下载地址 */
+    private fun openApkDownload() {
+        val typed = serverInput.text.toString().trim()
+        val raw = typed.ifEmpty { prefs.server.trim() }
+        if (raw.isEmpty()) {
+            toast("请先填写服务器地址")
+            serverInput.requestFocus()
+            return
+        }
+        val base = if (raw.startsWith("http://") || raw.startsWith("https://")) {
+            raw.trimEnd('/')
+        } else {
+            "http://" + raw.trimEnd('/')
+        }
+        val url = "$base/api/apk/download"
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+        } catch (err: Throwable) {
+            toast("无法打开下载链接：$url")
+        }
     }
 
     /** 服务端发布了新版本 APK 时提示下载 */
