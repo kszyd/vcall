@@ -2,6 +2,19 @@
 
 VCall 的重要版本节点，按时间倒序。每个版本都能在 [Releases](https://github.com/kszyd/vcall/releases) 下载对应的 APK。
 
+## v2.14.0 · 2026-11-14
+
+**修复电视端看不到对端画面（能听到声音）**
+
+- 本地小窗渲染由 SurfaceView 改为 TextureView：Surface 的 MediaOverlay 层会把远端 SurfaceView 压成黑屏，改用 TextureView 后不再抢图层
+- 电视端在 SDP 中声明最多接收 720p（`max-fs=3600`），避免盒子软解 1080p 卡死黑屏
+- 码率自适应策略统一为「带宽不足时保帧率、降分辨率」
+
+## v2.13.2 · 2026-11-14
+
+- 网页登录页说明文字居中
+- 下载链接移到说明文字下方（网页与 APK 一致）
+
 ## v2.13.1 · 2026-11-14
 
 - 管理后台移除「在线趋势」模块，页面更紧凑

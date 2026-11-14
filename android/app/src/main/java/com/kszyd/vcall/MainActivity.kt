@@ -43,7 +43,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.webrtc.IceCandidate
 import org.webrtc.PeerConnection
-import org.webrtc.SurfaceViewRenderer
+import org.webrtc.TextureViewRenderer
 import java.io.IOException
 import kotlin.math.abs
 
@@ -121,7 +121,7 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
     private lateinit var emptyHint: TextView
 
     private lateinit var remoteGrid: GridLayout
-    private lateinit var localRenderer: SurfaceViewRenderer
+    private lateinit var localRenderer: TextureViewRenderer
     private lateinit var localContainer: View
     private lateinit var callTopBar: View
     private lateinit var bottomBar: View

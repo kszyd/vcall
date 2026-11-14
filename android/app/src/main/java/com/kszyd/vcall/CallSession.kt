@@ -25,6 +25,7 @@ import org.webrtc.SdpObserver
 import org.webrtc.SessionDescription
 import org.webrtc.SurfaceTextureHelper
 import org.webrtc.SurfaceViewRenderer
+import org.webrtc.TextureViewRenderer
 import org.webrtc.VideoSource
 import org.webrtc.VideoTrack
 
@@ -34,7 +35,7 @@ import org.webrtc.VideoTrack
 class CallSession(
     private val context: Context,
     private val app: VCallApp,
-    private val localRenderer: SurfaceViewRenderer,
+    private val localRenderer: TextureViewRenderer,
     private val grid: GridLayout,
     private val isTvDevice: Boolean = false
 ) {
@@ -85,27 +86,18 @@ class CallSession(
     /* ------------------------------ 初始化 ------------------------------ */
 
     fun initRenderers() {
-        localRenderer.init(app.eglBase.eglBaseContext, null)
-        // FIT：完整显示画面，不裁剪；FILL 会把 4:3 摄像头画面裁成 16:9，看起来像被放大
+        // 本地小窗用 TextureView：避免 SurfaceView 的 MediaOverlay 层把远端画面压成黑屏
+        localRenderer.init(app.eglBase.eglBaseContext)
         localRenderer.setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FIT)
-        localRenderer.setEnableHardwareScaler(true)
         localRenderer.setMirror(true)
-        // 默认本地是小窗，浮在远端全屏之上
-        localRenderer.setZOrderMediaOverlay(true)
     }
 
     /**
-     * 切换大小画面时同步调整两个 SurfaceView 的层级：
-     * 小窗用 MediaOverlay 浮起，全屏用普通层垫底，避免互相遮挡。
+     * 本地小窗改为 TextureView 后由 View 层级（elevation / bringToFront）控制叠放，
+     * 不再需要调整 Surface 的 Z 序。
      */
     fun setSwappedLayout(swapped: Boolean) {
-        try {
-            localRenderer.setZOrderMediaOverlay(!swapped)
-            for (i in 0 until grid.childCount) {
-                (grid.getChildAt(i) as? SurfaceViewRenderer)?.setZOrderMediaOverlay(swapped)
-            }
-        } catch (ignored: Throwable) {
-        }
+        // 留空：兼容原有调用点
     }
 
     fun setIceServers(servers: List<PeerConnection.IceServer>) {
@@ -326,21 +318,26 @@ class CallSession(
             } else if (line.startsWith("m=")) {
                 inVideo = false
             } else if (inVideo && line.startsWith("a=fmtp:") && !line.contains("x-google-max-bitrate")) {
-                lines[i] = line + ";x-google-max-bitrate=20000;x-google-min-bitrate=500;x-google-start-bitrate=4000"
+                var extra = ";x-google-max-bitrate=20000;x-google-min-bitrate=500;x-google-start-bitrate=4000"
+                if (isTvDevice) {
+                    // 电视盒子软解 1080p 吃力：声明最多接收 720p，对端会自动降分辨率，避免黑屏/卡死
+                    extra += ";max-fs=3600;max-mbps=108000"
+                }
+                lines[i] = line + extra
             }
         }
         return lines.joinToString("\r\n")
     }
 
     /**
-     * 画质优先：带宽不足时保持分辨率、先降帧率；同时放开编码码率上限。
+     * 带宽不足时保持帧率、降低分辨率（即“降清晰度”），避免画面卡成幻灯片。
      * 需在 SDP 协商完成后调用。
      */
     private fun applyVideoParams(pc: PeerConnection) {
         try {
             val sender = pc.senders.firstOrNull { it.track()?.kind() == "video" } ?: return
             val params = sender.parameters ?: return
-            params.degradationPreference = RtpParameters.DegradationPreference.MAINTAIN_RESOLUTION
+            params.degradationPreference = RtpParameters.DegradationPreference.MAINTAIN_FRAMERATE
             params.encodings?.forEach { encoding ->
                 encoding.maxBitrateBps = 20_000_000
                 encoding.minBitrateBps = 500_000

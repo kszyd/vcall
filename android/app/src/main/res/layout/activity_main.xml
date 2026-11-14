@@ -380,7 +380,7 @@
             android:background="@drawable/bg_local_frame"
             android:elevation="8dp">
 
-            <org.webrtc.SurfaceViewRenderer
+            <org.webrtc.TextureViewRenderer
                 android:id="@+id/localRenderer"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent" />
