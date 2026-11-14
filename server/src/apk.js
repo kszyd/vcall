@@ -94,7 +94,7 @@ class ApkStore {
     });
   }
 
-  commit({ tmp, size, sha256, version, versionCode }) {
+  commit({ tmp, size, sha256, version, versionCode, source }) {
     fs.renameSync(tmp, this.file);
     this.info = {
       version,
@@ -102,6 +102,8 @@ class ApkStore {
       size,
       sha256,
       uploadedAt: Date.now(),
+      // apk：版本号由 APK 内真实值解析得到；manual：历史上按管理端手填记录
+      source: source || 'apk',
     };
     fs.writeFileSync(this.metaFile, JSON.stringify(this.info, null, 2));
     return this.latest();

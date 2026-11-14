@@ -299,16 +299,19 @@ class AdminService {
       }
     }
 
-    if (this.apk.info && finalCode <= this.apk.info.versionCode) {
+    // 只有可信记录（版本号来自 APK 解析）才严格要求递增；
+    // 旧版本手填偏大的错误记录允许被真实值覆盖一次，避免再也传不上去
+    const current = this.apk.info;
+    if (current && current.source === 'apk' && finalCode <= current.versionCode) {
       return this.json(res, 400, {
         ok: false,
-        error: `版本码需大于当前版本 ${this.apk.info.versionCode}`,
+        error: `版本码需大于当前版本 ${current.versionCode}`,
       });
     }
 
     let info;
     try {
-      info = this.apk.commit({ ...received, version: finalVersion, versionCode: finalCode });
+      info = this.apk.commit({ ...received, version: finalVersion, versionCode: finalCode, source: 'apk' });
     } catch (err) {
       return this.json(res, 500, {
         ok: false,
