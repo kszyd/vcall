@@ -237,6 +237,10 @@ input:focus {
   color: #93c5fd;
 }
 
+.center {
+  text-align: center;
+}
+
 #myName {
   cursor: pointer;
 }

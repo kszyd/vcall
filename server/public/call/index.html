@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>VCall 视频通话</title>
   <link rel="icon" href="/admin/favicon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="/call/call.css?v=2.13.1" />
+  <link rel="stylesheet" href="/call/call.css?v=2.13.2" />
 </head>
 <body>
   <!-- 登录 -->
@@ -33,8 +33,8 @@
       <p id="loginError" class="error"></p>
       <p id="announcement" class="notice hidden"></p>
       <p id="secureHint" class="announce hidden">当前为 HTTP 访问，浏览器无法使用摄像头/麦克风，可接听并观看对方画面；双向通话请使用 VCall APK。</p>
+      <p class="hint muted center">同一服务器下的终端会自动出现在通讯录中。</p>
       <p class="apk-link"><a id="apkDownload" href="/api/apk/download">如需此应用，请点击此处下载！</a></p>
-      <p class="hint muted">同一服务器下的终端会自动出现在通讯录中。</p>
     </div>
   </div>
 
@@ -99,6 +99,6 @@
   </div>
 
   <div id="toast" class="toast hidden"></div>
-  <script src="/call/call.js?v=2.13.1"></script>
+  <script src="/call/call.js?v=2.13.2"></script>
 </body>
 </html>
