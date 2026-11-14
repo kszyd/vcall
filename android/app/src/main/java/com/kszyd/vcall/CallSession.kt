@@ -25,7 +25,6 @@ import org.webrtc.SdpObserver
 import org.webrtc.SessionDescription
 import org.webrtc.SurfaceTextureHelper
 import org.webrtc.SurfaceViewRenderer
-import org.webrtc.TextureViewRenderer
 import org.webrtc.VideoSource
 import org.webrtc.VideoTrack
 
@@ -35,7 +34,7 @@ import org.webrtc.VideoTrack
 class CallSession(
     private val context: Context,
     private val app: VCallApp,
-    private val localRenderer: TextureViewRenderer,
+    private val localRenderer: SurfaceViewRenderer,
     private val grid: GridLayout,
     private val isTvDevice: Boolean = false
 ) {
@@ -86,15 +85,19 @@ class CallSession(
     /* ------------------------------ 初始化 ------------------------------ */
 
     fun initRenderers() {
-        // 本地小窗用 TextureView：避免 SurfaceView 的 MediaOverlay 层把远端画面压成黑屏
-        localRenderer.init(app.eglBase.eglBaseContext)
+        localRenderer.init(app.eglBase.eglBaseContext, null)
         localRenderer.setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FIT)
+        localRenderer.setEnableHardwareScaler(true)
         localRenderer.setMirror(true)
+        // 关键：本地小窗不能用 MediaOverlay —— 它会占住 overlay 层，把远端的普通层 SurfaceView 压成黑屏。
+        // 改用 ZOrderOnTop 让本地小窗浮在窗口最上层，远端保持普通层正常显示。
+        localRenderer.setZOrderMediaOverlay(false)
+        localRenderer.setZOrderOnTop(true)
     }
 
     /**
-     * 本地小窗改为 TextureView 后由 View 层级（elevation / bringToFront）控制叠放，
-     * 不再需要调整 Surface 的 Z 序。
+     * 本地小窗固定在顶层，不做 Surface 层级互换；
+     * 切换主画面时只调整 View 的显隐（见 MainActivity）。
      */
     fun setSwappedLayout(swapped: Boolean) {
         // 留空：兼容原有调用点

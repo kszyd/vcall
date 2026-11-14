@@ -43,7 +43,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.webrtc.IceCandidate
 import org.webrtc.PeerConnection
-import org.webrtc.TextureViewRenderer
+import org.webrtc.SurfaceViewRenderer
 import java.io.IOException
 import kotlin.math.abs
 
@@ -121,7 +121,7 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
     private lateinit var emptyHint: TextView
 
     private lateinit var remoteGrid: GridLayout
-    private lateinit var localRenderer: TextureViewRenderer
+    private lateinit var localRenderer: SurfaceViewRenderer
     private lateinit var localContainer: View
     private lateinit var callTopBar: View
     private lateinit var bottomBar: View
@@ -388,12 +388,11 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
     }
 
     private fun toggleMainView() {
-        if ((session?.peerCount ?: 0) > 1) {
-            showHint("多人通话暂不支持切换画面")
-            return
-        }
-        swapped = !swapped
-        applyCallLayout()
+        // 本地小窗固定在窗口顶层（ZOrderOnTop），无法与远端互换图层；
+        // 点击改为显示/隐藏本端预览，保证远端画面始终可见。
+        localContainer.visibility =
+            if (localContainer.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+        showHint(if (localContainer.visibility == View.VISIBLE) "已显示本端画面" else "已隐藏本端画面")
         showControls()
     }
 
