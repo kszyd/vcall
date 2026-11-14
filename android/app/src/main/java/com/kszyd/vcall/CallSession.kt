@@ -35,7 +35,8 @@ class CallSession(
     private val context: Context,
     private val app: VCallApp,
     private val localRenderer: SurfaceViewRenderer,
-    private val grid: GridLayout
+    private val grid: GridLayout,
+    private val isTvDevice: Boolean = false
 ) {
 
     data class StatsSnapshot(
@@ -83,7 +84,8 @@ class CallSession(
 
     fun initRenderers() {
         localRenderer.init(app.eglBase.eglBaseContext, null)
-        localRenderer.setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FILL)
+        // FIT：完整显示画面，不裁剪；FILL 会把 4:3 摄像头画面裁成 16:9，看起来像被放大
+        localRenderer.setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FIT)
         localRenderer.setEnableHardwareScaler(true)
         localRenderer.setMirror(true)
         // 默认本地是小窗，浮在远端全屏之上
@@ -129,10 +131,12 @@ class CallSession(
             track.addSink(localRenderer)
             videoTrack = track
             capturer.initialize(surfaceHelper, context, source.capturerObserver)
-            // 固定 1080p 采集，码率与帧率由 WebRTC 按带宽自适应
-            capturer.startCapture(1920, 1080, 30)
+            // 电视盒子解码与带宽都弱一些，720p 起步更稳；手机保持 1080p
+            val captureWidth = if (isTvDevice) 1280 else 1920
+            val captureHeight = if (isTvDevice) 720 else 1080
+            capturer.startCapture(captureWidth, captureHeight, 30)
             try {
-                source.adaptOutputFormat(1920, 1080, 30)
+                source.adaptOutputFormat(captureWidth, captureHeight, 30)
             } catch (ignored: Throwable) {
             }
             videoCapturer = capturer
@@ -186,9 +190,12 @@ class CallSession(
 
         val renderer = SurfaceViewRenderer(context)
         renderer.init(app.eglBase.eglBaseContext, null)
-        renderer.setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FILL)
+        // 完整显示对端画面，避免 4:3/16:9 混合时被裁剪放大
+        renderer.setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FIT)
         renderer.setEnableHardwareScaler(true)
         renderer.setMirror(false)
+        // 显式放在普通视频层，避免与本地小窗的 MediaOverlay 层互相遮挡
+        renderer.setZOrderMediaOverlay(false)
 
         val config = PeerConnection.RTCConfiguration(iceServers).apply {
             sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN

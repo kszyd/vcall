@@ -171,12 +171,22 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
             packageManager.hasSystemFeature("android.hardware.type.television")
 
         bindViews()
+        applyTvSafeArea()
         setupDefaults()
         setupListeners()
         showLogin()
         fetchAnnouncement()
 
         if (isTv) joinButton.requestFocus()
+    }
+
+    /** 电视普遍存在 overscan，边缘内容会被裁掉，统一留出安全边距 */
+    private fun applyTvSafeArea() {
+        if (!isTv) return
+        val horizontal = dp(28)
+        directoryPanel.setPadding(horizontal, dp(18), horizontal, dp(12))
+        loginPanel.setPadding(horizontal, dp(36), horizontal, dp(28))
+        callPanel.setPadding(dp(8), dp(8), dp(8), dp(8))
     }
 
     private fun bindViews() {
@@ -1011,7 +1021,7 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
             }
             return
         }
-        val created = CallSession(this, app, localRenderer, remoteGrid)
+        val created = CallSession(this, app, localRenderer, remoteGrid, isTv)
         created.initRenderers()
         created.setIceServers(iceServers)
         created.setSpeakerphone(speakerOn)
@@ -1220,7 +1230,14 @@ class MainActivity : AppCompatActivity(), SignalingClient.Listener {
             incomingPanel.visibility == View.VISIBLE -> rejectCall()
             callPanel.visibility == View.VISIBLE -> hangup()
             directoryPanel.visibility == View.VISIBLE -> logout()
-            else -> super.onBackPressed()
+            else -> {
+                // 登录页：先保存当前填写的地址与昵称，再退出，避免下次打开变空
+                val server = serverInput.text.toString().trim()
+                if (server.isNotEmpty()) prefs.server = server
+                val name = nameInput.text.toString().trim()
+                if (name.isNotEmpty()) prefs.name = name
+                finish()
+            }
         }
     }
 

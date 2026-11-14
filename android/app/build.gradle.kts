@@ -11,8 +11,8 @@ android {
         applicationId = "com.kszyd.vcall"
         minSdk = 23
         targetSdk = 34
-        versionCode = 18
-        versionName = "2.10.1"
+        versionCode = 19
+        versionName = "2.11.0"
 
         // 覆盖绝大多数手机与电视盒子；x86 模拟器如需调试可自行添加
         // -Pcompat=1 构建 32 位兼容包（仅 armeabi-v7a，so 解压安装），用于老旧盒子
