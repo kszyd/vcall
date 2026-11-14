@@ -266,11 +266,9 @@ class AdminService {
     if (!payload) return this.json(res, 401, { ok: false, error: '未登录或登录已过期' });
     if (!this.apk) return this.json(res, 500, { ok: false, error: 'APK 存储未初始化' });
 
+    // 版本号完全由服务端从 APK 内解析，管理端不再手填
     const version = String(req.headers['x-version'] || '').trim().slice(0, 20);
-    const versionCode = Number(req.headers['x-version-code']);
-    if (!version || !Number.isInteger(versionCode) || versionCode <= 0) {
-      return this.json(res, 400, { ok: false, error: '请填写版本名和版本码（版本码为正整数）' });
-    }
+    const versionCode = Number(req.headers['x-version-code']) || 0;
 
     let received;
     try {
@@ -288,15 +286,23 @@ class AdminService {
 
     // 以 APK 内真实的 versionCode/versionName 为准，避免手填偏高导致终端反复提示升级
     const meta = readApkMeta(received.tmp);
-    let finalVersion = version;
-    let finalCode = versionCode;
-    let note = '';
-    if (meta && meta.versionCode > 0) {
-      if (meta.versionCode !== versionCode || (meta.versionName && meta.versionName !== version)) {
-        finalVersion = meta.versionName || version;
-        finalCode = meta.versionCode;
-        note = `已按 APK 实际版本 ${finalVersion}（${finalCode}）记录`;
+    if (!meta || !meta.versionCode) {
+      try {
+        fs.unlinkSync(received.tmp);
+      } catch (err) {
+        // ignore
       }
+      return this.json(res, 400, {
+        ok: false,
+        error: '无法从 APK 读取版本信息，请确认文件完整（能正常安装的 apk 才能解析）',
+      });
+    }
+
+    const finalVersion = meta.versionName || version || 'code-' + meta.versionCode;
+    const finalCode = meta.versionCode;
+    let note = '';
+    if (version && (version !== finalVersion || versionCode !== finalCode)) {
+      note = `已按 APK 实际版本 ${finalVersion}（${finalCode}）记录`;
     }
 
     // 只有可信记录（版本号来自 APK 解析）才严格要求递增；

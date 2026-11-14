@@ -37,7 +37,7 @@ services:
       # VCALL_TURN_PASS: "yourpass"
 
     volumes:
-      - ./data:/data                      # 持久化设置
+      - vcall-data:/data                  # 命名卷，更新镜像不丢数据
       - ./certs:/certs:ro                 # 自签证书
 
     logging:
@@ -45,3 +45,6 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+
+volumes:
+  vcall-data:

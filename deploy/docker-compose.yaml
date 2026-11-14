@@ -40,7 +40,9 @@ services:
       # VCALL_STUN_URLS: "stun:stun.l.google.com:19302"
 
     volumes:
-      - ./data:/data                      # 持久化设置（settings.json），首次启动自动创建
+      # 数据（settings.json、上传的 APK）放在命名卷里，更新镜像或重建容器都不会丢；
+      # 早期版本用 ./data 绑定挂载，换目录部署就会“数据消失”，已改为命名卷。
+      - vcall-data:/data
       - ./certs:/certs:ro                 # 自签证书目录（server.crt / server.key）
 
     logging:
@@ -48,3 +50,6 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+
+volumes:
+  vcall-data:                             # 首次启动自动创建，命名为 vcall_vcall-data

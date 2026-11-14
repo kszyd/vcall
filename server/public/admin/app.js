@@ -172,20 +172,12 @@
       '当前 v' + info.version + '（版本码 ' + info.versionCode + '）' +
       (size ? ' · ' + size : '') +
       (info.uploadedAt ? ' · ' + formatClock(info.uploadedAt) : '');
-    if (!$('apkVersion').value) $('apkVersion').value = info.version;
-    if (!$('apkVersionCode').value) $('apkVersionCode').value = String(info.versionCode + 1);
   }
 
   function uploadApk() {
     const file = $('apkFile').files && $('apkFile').files[0];
-    const version = $('apkVersion').value.trim();
-    const versionCode = Number($('apkVersionCode').value);
     if (!file) {
       toast('请先选择 APK 文件');
-      return;
-    }
-    if (!version || !Number.isInteger(versionCode) || versionCode <= 0) {
-      toast('请填写版本名和版本码');
       return;
     }
 
@@ -196,8 +188,6 @@
     const xhr = new XMLHttpRequest();
     xhr.open('POST', '/api/admin/apk');
     xhr.setRequestHeader('Authorization', 'Bearer ' + state.token);
-    xhr.setRequestHeader('x-version', version);
-    xhr.setRequestHeader('x-version-code', String(versionCode));
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) {
         $('apkHint').textContent = '上传中 ' + Math.round((e.loaded / e.total) * 100) + '%';
@@ -218,7 +208,6 @@
         if (data.note) message += ' · ' + data.note;
         $('apkHint').textContent = message;
         $('apkFile').value = '';
-        $('apkVersionCode').value = '';
         renderApk(data.apk);
         toast('新版本已推送');
       } else {
