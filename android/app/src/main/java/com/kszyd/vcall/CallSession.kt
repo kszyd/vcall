@@ -192,7 +192,8 @@ class CallSession(
         renderer.init(app.eglBase.eglBaseContext, null)
         // 完整显示对端画面，避免 4:3/16:9 混合时被裁剪放大
         renderer.setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FIT)
-        renderer.setEnableHardwareScaler(true)
+        // 部分电视盒子 GPU 的硬件缩放器会导致黑屏，远端关闭它更稳
+        renderer.setEnableHardwareScaler(false)
         renderer.setMirror(false)
         // 显式放在普通视频层，避免与本地小窗的 MediaOverlay 层互相遮挡
         renderer.setZOrderMediaOverlay(false)
